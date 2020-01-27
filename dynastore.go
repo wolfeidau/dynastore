@@ -1,6 +1,10 @@
 package dynastore
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
+)
 
 var (
 	// ErrKeyNotFound record not found in the table
@@ -8,24 +12,33 @@ var (
 
 	// ErrKeyExists record already exists in table
 	ErrKeyExists = errors.New("key already exists in table")
+
+	// ErrKeyModified record has been modified, this probably means someone beat you to the change/lock
+	ErrKeyModified = errors.New("key has been modified")
 )
 
-type WriteOption struct {
+// Session holds the AWS Session settings and configuration
+type Session interface {
+	dynamodbiface.DynamoDBAPI
+
+	// Table returns a table
+	Table(tableName string) Table
 }
 
-type ReadOption struct {
+type Table interface {
+	// GetTableName return the name of the table being used
+	GetTableName() string
+
+	// Partition returns a partition store
+	Partition(partitionName string) Partition
 }
 
-type KVPair struct {
-}
+// Partition represents the backend K/V storage
+type Partition interface {
 
-type KVPage struct {
-	KVPairs []*KVPair
-}
+	// GetPartitionName return the name of the partition being used
+	GetPartitionName() string
 
-
-// Store represents the backend K/V storage
-type Store interface {
 	// Put a value at the specified key
 	Put(key string, options ...WriteOption) error
 
@@ -33,7 +46,7 @@ type Store interface {
 	Get(key string, options ...ReadOption) (*KVPair, error)
 
 	// List the content of a given prefix
-	List(prefix string, options ...ReadOption) ([]*KVPage, error)
+	List(prefix string, options ...ReadOption) ([]*KVPair, error)
 
 	// Delete the value at the specified key
 	Delete(key string) error

@@ -26,30 +26,6 @@ I am currently working on some testing around this, but with a bit of tuning you
 
 To manage this I would recommend you set alarms for read / write metrics, start with on demand but you will probably want to switch to specific read/write limits for production.
 
-# Usage
-
-The main interfaces are as follows, for something more complete see the [competing consumers example](examples/competing-consumers/main.go).
-
-```go
-// Store represents the backend K/V storage
-type Store interface {
-	// Put a value at the specified key
-	Put(key string, options ...WriteOption) error
-
-	// Get a value given its key
-	Get(key string, options ...ReadOption) (*KVPair, error)
-
-	// List the content of a given prefix
-	List(prefix string, options ...ReadOption) ([]*KVPair, error)
-
-	// Delete the value at the specified key
-	Delete(key string) error
-
-	// Verify if a Key exists in the store
-	Exists(key string, options ...ReadOption) (bool, error)
-}
-```
-
 # References
 
 Prior work in this space:
