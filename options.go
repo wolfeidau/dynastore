@@ -8,11 +8,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
-const (
-	// DefaultTTL default duration for locks
-	DefaultTTL = 20 * time.Second
-)
-
 // WriteOption assign various settings to the write options
 type WriteOption func(opts *WriteOptions)
 
@@ -31,11 +26,6 @@ func NewWriteOptions(opts ...WriteOption) *WriteOptions {
 
 	for _, opt := range opts {
 		opt(writeOpts)
-	}
-
-	if writeOpts.ttl == nil {
-		v := DefaultTTL
-		writeOpts.ttl = &v
 	}
 
 	return writeOpts

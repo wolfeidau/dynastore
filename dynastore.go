@@ -53,4 +53,12 @@ type Partition interface {
 
 	// Verify if a Key exists in the store
 	Exists(key string, options ...ReadOption) (bool, error)
+
+	// Atomic CAS operation on a single value.
+	// Pass previous = nil to create a new key.
+	// Pass previous = kv to update an existing value.
+	AtomicPut(key string, options ...WriteOption) (bool, *KVPair, error)
+
+	// Atomic delete of a single value
+	AtomicDelete(key string, previous *KVPair) (bool, error)
 }
