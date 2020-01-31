@@ -46,29 +46,29 @@ func (kv *KVPair) DecodeValue(out interface{}) error {
 	return dynamodbattribute.Unmarshal(kv.value, out)
 }
 
-type Dynasession struct {
+type dynaSession struct {
 	dynamodbiface.DynamoDBAPI
 }
 
-func (ds *Dynasession) Table(tableName string) Table {
-	return &Dynatable{session: ds, tableName: tableName}
+func (ds *dynaSession) Table(tableName string) Table {
+	return &dynatable{session: ds, tableName: tableName}
 }
 
-func (dt *Dynatable) GetTableName() string {
-	return dt.tableName
-}
-
-func (dt *Dynatable) Partition(partition string) Partition {
-	return &Dynapartition{session: dt.session, table: dt, partition: partition}
-}
-
-type Dynatable struct {
+type dynatable struct {
 	session   Session
 	tableName string
 }
 
-// Dynapartition store which is backed by AWS DynamoDB
-type Dynapartition struct {
+func (dt *dynatable) GetTableName() string {
+	return dt.tableName
+}
+
+func (dt *dynatable) Partition(partition string) Partition {
+	return &dynaPartition{session: dt.session, table: dt, partition: partition}
+}
+
+// dynaPartition store which is backed by AWS DynamoDB
+type dynaPartition struct {
 	session   Session
 	table     Table
 	partition string
@@ -80,21 +80,21 @@ func New(cfgs ...*aws.Config) Session {
 	sess := session.Must(session.NewSession(cfgs...))
 	dynamoSvc := dynamodb.New(sess)
 
-	return &Dynasession{
+	return &dynaSession{
 		dynamoSvc,
 	}
 }
 
-func (ddb *Dynapartition) GetTableName() string {
+func (ddb *dynaPartition) GetTableName() string {
 	return ddb.table.GetTableName()
 }
 
-func (ddb *Dynapartition) GetPartitionName() string {
+func (ddb *dynaPartition) GetPartitionName() string {
 	return ddb.partition
 }
 
 // Put a value at the specified key
-func (ddb *Dynapartition) Put(key string, options ...WriteOption) error {
+func (ddb *dynaPartition) Put(key string, options ...WriteOption) error {
 
 	params := ddb.buildUpdateItemInput(key, NewWriteOptions(options...))
 
@@ -107,7 +107,7 @@ func (ddb *Dynapartition) Put(key string, options ...WriteOption) error {
 }
 
 // Exists if a Key exists in the store
-func (ddb *Dynapartition) Exists(key string, options ...ReadOption) (bool, error) {
+func (ddb *dynaPartition) Exists(key string, options ...ReadOption) (bool, error) {
 
 	readOptions := NewReadOptions(options...)
 
@@ -134,7 +134,7 @@ func (ddb *Dynapartition) Exists(key string, options ...ReadOption) (bool, error
 }
 
 // Get a value given its key
-func (ddb *Dynapartition) Get(key string, options ...ReadOption) (*KVPair, error) {
+func (ddb *dynaPartition) Get(key string, options ...ReadOption) (*KVPair, error) {
 
 	readOptions := NewReadOptions(options...)
 
@@ -160,7 +160,7 @@ func (ddb *Dynapartition) Get(key string, options ...ReadOption) (*KVPair, error
 }
 
 // Delete the value at the specified key
-func (ddb *Dynapartition) Delete(key string) error {
+func (ddb *dynaPartition) Delete(key string) error {
 	_, err := ddb.session.DeleteItem(&dynamodb.DeleteItemInput{
 		TableName: aws.String(ddb.GetTableName()),
 		Key:       buildKeys(ddb.partition, key),
@@ -173,7 +173,7 @@ func (ddb *Dynapartition) Delete(key string) error {
 }
 
 // List the content of a given prefix
-func (ddb *Dynapartition) List(prefix string, options ...ReadOption) ([]*KVPair, error) {
+func (ddb *dynaPartition) List(prefix string, options ...ReadOption) ([]*KVPair, error) {
 
 	readOptions := NewReadOptions(options...)
 
@@ -234,7 +234,7 @@ func (ddb *Dynapartition) List(prefix string, options ...ReadOption) ([]*KVPair,
 }
 
 // AtomicPut Atomic CAS operation on a single value.
-func (ddb *Dynapartition) AtomicPut(key string, options ...WriteOption) (bool, *KVPair, error) {
+func (ddb *dynaPartition) AtomicPut(key string, options ...WriteOption) (bool, *KVPair, error) {
 
 	writeOptions := NewWriteOptions(options...)
 
@@ -274,7 +274,7 @@ func (ddb *Dynapartition) AtomicPut(key string, options ...WriteOption) (bool, *
 // * if previous is nil then assert that the key doesn't exist
 //
 // FIXME: should the second case just return false, nil?
-func (ddb *Dynapartition) AtomicDelete(key string, previous *KVPair) (bool, error) {
+func (ddb *dynaPartition) AtomicDelete(key string, previous *KVPair) (bool, error) {
 
 	getRes, err := ddb.getKey(key, NewReadOptions())
 	if err != nil {
@@ -308,7 +308,7 @@ func (ddb *Dynapartition) AtomicDelete(key string, previous *KVPair) (bool, erro
 	return true, nil
 }
 
-func (ddb *Dynapartition) getKey(key string, options *ReadOptions) (*dynamodb.GetItemOutput, error) {
+func (ddb *dynaPartition) getKey(key string, options *ReadOptions) (*dynamodb.GetItemOutput, error) {
 	return ddb.session.GetItem(&dynamodb.GetItemInput{
 		TableName:      aws.String(ddb.GetTableName()),
 		ConsistentRead: aws.Bool(options.consistent),
@@ -319,7 +319,7 @@ func (ddb *Dynapartition) getKey(key string, options *ReadOptions) (*dynamodb.Ge
 	})
 }
 
-func (ddb *Dynapartition) buildUpdateItemInput(key string, options *WriteOptions) *dynamodb.UpdateItemInput {
+func (ddb *dynaPartition) buildUpdateItemInput(key string, options *WriteOptions) *dynamodb.UpdateItemInput {
 
 	expressions := map[string]*dynamodb.AttributeValue{
 		":inc": {N: aws.String("1")},

@@ -17,7 +17,8 @@ var (
 	ErrKeyModified = errors.New("key has been modified")
 )
 
-// Session holds the AWS Session settings and configuration
+// Session represents the backend K/V storage using one or more DynamoDB tables containing partitions.
+// This primarily holds the AWS Session settings and configuration, and enables direct access to DynamoDB.
 type Session interface {
 	dynamodbiface.DynamoDBAPI
 
@@ -25,6 +26,8 @@ type Session interface {
 	Table(tableName string) Table
 }
 
+// Table represents a table in DynamoDB, this is where you store all your partitioned data for a given
+// model.
 type Table interface {
 	// GetTableName return the name of the table being used
 	GetTableName() string
@@ -33,7 +36,7 @@ type Table interface {
 	Partition(partitionName string) Partition
 }
 
-// Partition represents the backend K/V storage
+// Partition a partition represents a grouping of data within a DynamoDB table.
 type Partition interface {
 
 	// GetPartitionName return the name of the partition being used
