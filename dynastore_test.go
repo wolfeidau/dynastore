@@ -46,7 +46,7 @@ func Test(t *testing.T) {
 			err := ensureVersionTable(dbSvc, "testing-locks")
 			assert.NoError(err)
 
-			dl := &Dynasession{DynamoDBAPI: dbSvc}
+			dl := &dynaSession{DynamoDBAPI: dbSvc}
 
 			testPutGetDeleteExists(t, dl)
 			testList(t, dl)
