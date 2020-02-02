@@ -3,7 +3,6 @@ package dynastore
 import (
 	"context"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -12,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
+	dexp "github.com/aws/aws-sdk-go/service/dynamodb/expression"
 )
 
 const (
@@ -96,9 +96,23 @@ func (ddb *dynaPartition) GetPartitionName() string {
 // Put a value at the specified key
 func (ddb *dynaPartition) Put(key string, options ...WriteOption) error {
 
-	params := ddb.buildUpdateItemInput(key, NewWriteOptions(options...))
+	writeOptions := NewWriteOptions(options...)
 
-	_, err := ddb.session.UpdateItem(params)
+	update := buildUpdate(key, writeOptions)
+
+	expr, err := dexp.NewBuilder().WithUpdate(update).Build()
+	if err != nil {
+		return err
+	}
+
+	_, err = ddb.session.UpdateItem(&dynamodb.UpdateItemInput{
+		TableName:                 aws.String(ddb.GetTableName()),
+		Key:                       buildKeys(ddb.partition, key),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		UpdateExpression:          expr.Update(),
+		ReturnValues:              aws.String(dynamodb.ReturnValueAllNew),
+	})
 	if err != nil {
 		return err
 	}
@@ -238,14 +252,23 @@ func (ddb *dynaPartition) AtomicPut(key string, options ...WriteOption) (bool, *
 
 	writeOptions := NewWriteOptions(options...)
 
-	params := ddb.buildUpdateItemInput(key, writeOptions)
+	update := buildUpdate(key, writeOptions)
+	condition := updateWithConditions(writeOptions.previous)
 
-	err := updateWithConditions(params, writeOptions.previous)
+	expr, err := dexp.NewBuilder().WithUpdate(update).WithCondition(condition).Build()
 	if err != nil {
 		return false, nil, err
 	}
 
-	res, err := ddb.session.UpdateItem(params)
+	res, err := ddb.session.UpdateItem(&dynamodb.UpdateItemInput{
+		TableName:                 aws.String(ddb.GetTableName()),
+		Key:                       buildKeys(ddb.partition, key),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		UpdateExpression:          expr.Update(),
+		ConditionExpression:       expr.Condition(),
+		ReturnValues:              aws.String(dynamodb.ReturnValueAllNew),
+	})
 
 	if err != nil {
 		if awsErr, ok := err.(awserr.Error); ok {
@@ -285,16 +308,21 @@ func (ddb *dynaPartition) AtomicDelete(key string, previous *KVPair) (bool, erro
 		return false, ErrKeyExists
 	}
 
-	expAttr := map[string]*dynamodb.AttributeValue{
-		":lastRevision": {N: aws.String(strconv.FormatInt(previous.Version, 10))},
+	cond := dexp.Name("version").Equal(dexp.Value(previous.Version))
+
+	expr, err := dexp.NewBuilder().WithCondition(cond).Build()
+	if err != nil {
+		return false, err
 	}
 
 	req := &dynamodb.DeleteItemInput{
 		TableName:                 aws.String(ddb.GetTableName()),
 		Key:                       buildKeys(ddb.partition, key),
-		ConditionExpression:       aws.String("version = :lastRevision"),
-		ExpressionAttributeValues: expAttr,
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
 	}
+
 	_, err = ddb.session.DeleteItem(req)
 	if err != nil {
 		if awsErr, ok := err.(awserr.Error); ok {
@@ -319,44 +347,23 @@ func (ddb *dynaPartition) getKey(key string, options *ReadOptions) (*dynamodb.Ge
 	})
 }
 
-func (ddb *dynaPartition) buildUpdateItemInput(key string, options *WriteOptions) *dynamodb.UpdateItemInput {
+func buildUpdate(key string, options *WriteOptions) dexp.UpdateBuilder {
 
-	expressions := map[string]*dynamodb.AttributeValue{
-		":inc": {N: aws.String("1")},
-	}
-
-	updateExpression := "ADD version :inc"
-
-	setArgs := []string{}
+	update := dexp.Add(dexp.Name("version"), dexp.Value(1))
 
 	// if a value assigned
 	if options.value != nil {
-		expressions[":payload"] = options.value
-
-		setArgs = append(setArgs, "payload = :payload")
+		update = update.Set(dexp.Name("payload"), dexp.Value(aws.StringValue(options.value)))
 	}
 
 	// if a TTL assigned
 	if options.ttl != nil {
 		ttlVal := time.Now().Add(*options.ttl).Unix()
-		expressions[":ttl"] = &dynamodb.AttributeValue{N: aws.String(strconv.FormatInt(ttlVal, 10))}
 
-		setArgs = append(setArgs, "expires = :ttl")
+		update = update.Set(dexp.Name("expires"), dexp.Value(ttlVal))
 	}
 
-	// if we have anything to set append them to the update expression
-	if len(setArgs) > 0 {
-		updateExpression = updateExpression + " SET " + strings.Join(setArgs, ",")
-	}
-
-	return &dynamodb.UpdateItemInput{
-		TableName:                 aws.String(ddb.GetTableName()),
-		Key:                       buildKeys(ddb.partition, key),
-		ExpressionAttributeValues: expressions,
-		UpdateExpression:          aws.String(updateExpression),
-		ReturnValues:              aws.String(dynamodb.ReturnValueAllNew),
-	}
-
+	return update
 }
 
 func buildKeys(partition, key string) map[string]*dynamodb.AttributeValue {
@@ -366,33 +373,44 @@ func buildKeys(partition, key string) map[string]*dynamodb.AttributeValue {
 	}
 }
 
-func updateWithConditions(item *dynamodb.UpdateItemInput, previous *KVPair) error {
+func updateWithConditions(previous *KVPair) dexp.ConditionBuilder {
 
 	if previous != nil {
+
+		// "version = :lastRevision AND ( attribute_not_exists(expires) OR (attribute_exists(expires) AND expires > :timeNow) )"
+
+		// the previous kv is in the DB and is at the expected revision, also if it has a TTL set it is NOT expired.
+		checkExpires := dexp.Or(
+			dexp.AttributeNotExists(dexp.Name("expires")),
+			dexp.Name("expires").GreaterThanEqual(dexp.Value(time.Now().Unix())),
+		)
+
 		//
 		// if there is a previous provided then we override the create check
 		//
+		checkVersion := dexp.Name("version").Equal(dexp.Value(previous.Version))
 
-		item.ExpressionAttributeValues[":lastRevision"] = &dynamodb.AttributeValue{N: aws.String(strconv.FormatInt(previous.Version, 10))}
-		item.ExpressionAttributeValues[":timeNow"] = &dynamodb.AttributeValue{N: aws.String(strconv.FormatInt(time.Now().Unix(), 10))}
-
-		// the previous kv is in the DB and is at the expected revision, also if it has a TTL set it is NOT expired.
-		item.ConditionExpression = aws.String("version = :lastRevision AND (attribute_not_exists(expires) OR (attribute_exists(expires) AND expires > :timeNow))")
-
-		return nil
+		return dexp.And(checkVersion, checkExpires)
 	}
 
 	//
 	// assign the create check to ensure record doesn't exist which isn't expired
 	//
 
-	item.ExpressionAttributeNames = map[string]*string{"#name": aws.String("name")}
-	item.ExpressionAttributeValues[":timeNow"] = &dynamodb.AttributeValue{N: aws.String(strconv.FormatInt(time.Now().Unix(), 10))}
+	// "(attribute_not_exists(id) AND attribute_not_exists(#name)) OR (attribute_exists(expires) AND expires < :timeNow)"
 
+	// the previous kv is in the DB and is at the expected revision, also if it has a TTL set it is NOT expired.
+	checkExpires := dexp.And(
+		dexp.AttributeNotExists(dexp.Name("expires")),
+		dexp.Name("expires").LessThan(dexp.Value(time.Now().Unix())),
+	)
 	// if the record exists and is NOT expired
-	item.ConditionExpression = aws.String("(attribute_not_exists(id) AND attribute_not_exists(#name)) OR (attribute_exists(expires) AND expires < :timeNow)")
+	checkExists := dexp.And(
+		dexp.AttributeNotExists(dexp.Name("id")),
+		dexp.AttributeNotExists(dexp.Name("name")),
+	)
 
-	return nil
+	return dexp.Or(checkExists, checkExpires)
 }
 
 func decodeItem(item map[string]*dynamodb.AttributeValue) (*KVPair, error) {

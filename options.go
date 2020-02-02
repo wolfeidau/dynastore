@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
 // WriteOption assign various settings to the write options
@@ -13,7 +12,7 @@ type WriteOption func(opts *WriteOptions)
 
 // WriteOptions contains optional request parameters
 type WriteOptions struct {
-	value    *dynamodb.AttributeValue
+	value    *string
 	ttl      *time.Duration
 	previous *KVPair // Optional, previous value used to assert if the record has been modified before an atomic update
 }
@@ -48,14 +47,7 @@ func WriteWithNoExpires() WriteOption {
 // WriteWithBytes byte slice to the key which is written
 func WriteWithBytes(val []byte) WriteOption {
 	return func(opts *WriteOptions) {
-		opts.value = encodePayload(val)
-	}
-}
-
-// WriteWithAttributeValue dynamodb attribute value which is written
-func WriteWithAttributeValue(av *dynamodb.AttributeValue) WriteOption {
-	return func(opts *WriteOptions) {
-		opts.value = av
+		opts.value = aws.String(base64.StdEncoding.EncodeToString(val))
 	}
 }
 
@@ -68,11 +60,6 @@ func WriteWithPreviousKV(previous *KVPair) WriteOption {
 			opts.ttl = &v
 		}
 	}
-}
-
-func encodePayload(payload []byte) *dynamodb.AttributeValue {
-	encodedValue := base64.StdEncoding.EncodeToString(payload)
-	return &dynamodb.AttributeValue{S: aws.String(encodedValue)}
 }
 
 // ReadOption assign various settings to the read options
