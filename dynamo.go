@@ -165,7 +165,7 @@ func (ddb *dynaPartition) Get(key string, options ...ReadOption) (*KVPair, error
 		return nil, ErrKeyNotFound
 	}
 
-	item, err := decodeItem(res.Item)
+	item, err := DecodeItem(res.Item)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +231,7 @@ func (ddb *dynaPartition) List(prefix string, options ...ReadOption) ([]*KVPair,
 	results := []*KVPair{}
 
 	for _, item := range items {
-		val, err := decodeItem(item)
+		val, err := DecodeItem(item)
 		if err != nil {
 			return nil, err
 		}
@@ -282,7 +282,7 @@ func (ddb *dynaPartition) AtomicPut(key string, options ...WriteOption) (bool, *
 		return false, nil, err
 	}
 
-	item, err := decodeItem(res.Attributes)
+	item, err := DecodeItem(res.Attributes)
 	if err != nil {
 		return false, nil, err
 	}
@@ -413,7 +413,8 @@ func updateWithConditions(previous *KVPair) dexp.ConditionBuilder {
 	return dexp.Or(checkExists, checkExpires)
 }
 
-func decodeItem(item map[string]*dynamodb.AttributeValue) (*KVPair, error) {
+// DecodeItem decode a DDB attribute value into a KVPair
+func DecodeItem(item map[string]*dynamodb.AttributeValue) (*KVPair, error) {
 	kv := &KVPair{}
 
 	err := dynamodbattribute.UnmarshalMap(item, kv)
