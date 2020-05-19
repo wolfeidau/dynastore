@@ -51,6 +51,12 @@ type Partition interface {
 	// List the content of a given prefix
 	List(prefix string, options ...ReadOption) ([]*KVPair, error)
 
+	// List the content of the given prefix and return a page which contains the key
+	// and includes a last key if there were more records.
+	//
+	// The ReadWithStartKey can be used to pass the key to the next call.
+	ListPage(prefix string, options ...ReadOption) (*KVPairPage, error)
+
 	// Delete the value at the specified key
 	Delete(key string) error
 

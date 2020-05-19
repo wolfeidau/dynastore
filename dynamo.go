@@ -18,6 +18,13 @@ const (
 	listDefaultTimeout = time.Second * 10
 )
 
+// KVPairPage provides a page of keys with next token
+// to enable paging
+type KVPairPage struct {
+	Keys    []*KVPair `json:"keys"`
+	LastKey string    `json:"last_key"`
+}
+
 // KVPair represents {Key, Value, Version} tuple, internally
 // this uses a *dynamodb.AttributeValue which can be used to
 // store strings, slices or structs
@@ -32,7 +39,7 @@ type KVPair struct {
 
 // BytesValue use the attribute to return a slice of bytes, a nil will be returned if it is empty or nil
 func (kv *KVPair) BytesValue() []byte {
-	buf := []byte{}
+	var buf []byte
 
 	err := dynamodbattribute.Unmarshal(kv.value, &buf)
 	if err != nil {
@@ -42,6 +49,7 @@ func (kv *KVPair) BytesValue() []byte {
 	return buf
 }
 
+// DecodeValue decode using dynamodbattribute
 func (kv *KVPair) DecodeValue(out interface{}) error {
 	return dynamodbattribute.Unmarshal(kv.value, out)
 }
@@ -187,6 +195,68 @@ func (ddb *dynaPartition) Delete(key string) error {
 }
 
 // List the content of a given prefix
+func (ddb *dynaPartition) ListPage(prefix string, options ...ReadOption) (*KVPairPage, error) {
+	readOptions := NewReadOptions(options...)
+
+	key := dexp.Key("id").Equal(dexp.Value(ddb.partition))
+
+	if prefix != "" {
+		key = key.And(dexp.Key("name").BeginsWith(prefix))
+	}
+
+	expr, err := dexp.NewBuilder().WithKeyCondition(key).Build()
+	if err != nil {
+		return nil, err
+	}
+
+	si := &dynamodb.QueryInput{
+		TableName:                 aws.String(ddb.GetTableName()),
+		KeyConditionExpression:    expr.KeyCondition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		ConsistentRead:            aws.Bool(readOptions.consistent),
+		Limit:                     readOptions.limit,
+	}
+
+	// avoid either a nil or empty value
+	if startKey := aws.StringValue(readOptions.startKey); startKey != "" {
+		key, err := decompressAndDecodeKey(startKey)
+		if err != nil {
+			return nil, err
+		}
+
+		si.ExclusiveStartKey = key
+	}
+
+	res, err := ddb.session.Query(si)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]*KVPair, len(res.Items))
+
+	for n, item := range res.Items {
+		val, err := DecodeItem(item)
+		if err != nil {
+			return nil, err
+		}
+
+		results[n] = val
+	}
+
+	page := &KVPairPage{Keys: results}
+
+	if len(res.LastEvaluatedKey) != 0 {
+		page.LastKey, err = compressAndEncodeKey(res.LastEvaluatedKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return page, nil
+}
+
+// List the content of a given prefix
 func (ddb *dynaPartition) List(prefix string, options ...ReadOption) ([]*KVPair, error) {
 
 	readOptions := NewReadOptions(options...)
@@ -207,7 +277,7 @@ func (ddb *dynaPartition) List(prefix string, options ...ReadOption) ([]*KVPair,
 
 	ctcx, cancel := context.WithTimeout(context.Background(), listDefaultTimeout)
 
-	items := []map[string]*dynamodb.AttributeValue{}
+	var items []map[string]*dynamodb.AttributeValue
 
 	err := ddb.session.QueryPagesWithContext(ctcx, si,
 		func(page *dynamodb.QueryOutput, lastPage bool) bool {
@@ -228,7 +298,7 @@ func (ddb *dynaPartition) List(prefix string, options ...ReadOption) ([]*KVPair,
 		return nil, ErrKeyNotFound
 	}
 
-	results := []*KVPair{}
+	var results []*KVPair
 
 	for _, item := range items {
 		val, err := DecodeItem(item)
