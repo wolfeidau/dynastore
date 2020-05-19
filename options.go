@@ -68,6 +68,8 @@ type ReadOption func(opts *ReadOptions)
 // ReadOptions contains optional request parameters
 type ReadOptions struct {
 	consistent bool
+	limit      *int64
+	startKey   *string
 }
 
 // NewReadOptions create read options, assign defaults then accept overrides
@@ -89,5 +91,21 @@ func NewReadOptions(opts ...ReadOption) *ReadOptions {
 func ReadConsistentDisable() ReadOption {
 	return func(opts *ReadOptions) {
 		opts.consistent = false
+	}
+}
+
+// ReadWithStartKey read a list of records with the exclusive start key provided
+// this will apply to list operations only.
+func ReadWithStartKey(key string) ReadOption {
+	return func(opts *ReadOptions) {
+		opts.startKey = aws.String(key)
+	}
+}
+
+// ReadWithLimit read a list of records with the limit provided
+// this will apply to list operations only.
+func ReadWithLimit(limit int64) ReadOption {
+	return func(opts *ReadOptions) {
+		opts.limit = aws.Int64(limit)
 	}
 }

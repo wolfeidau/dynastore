@@ -50,6 +50,7 @@ func Test(t *testing.T) {
 
 			testPutGetDeleteExists(t, dl)
 			testList(t, dl)
+			testListPage(t, dl)
 			testAtomicPut(t, dl)
 			testAtomicDelete(t, dl)
 		})
@@ -309,6 +310,58 @@ func testList(t *testing.T, session Session) {
 		assert.NoError(err)
 		assert.NotNil(pairs)
 		assert.Equal(3, len(pairs))
+
+	})
+}
+
+func testListPage(t *testing.T, session Session) {
+
+	assert := require.New(t)
+
+	kv := session.Table("testing-locks").Partition("agent")
+
+	t.Run("ListPage", func(t *testing.T) {
+
+		childKey := "testList/child"
+		subfolderKey := "testList/subfolder"
+
+		// Put the first child key
+		err := kv.Put(childKey, WriteWithBytes([]byte("first")))
+		assert.NoError(err)
+
+		// Put the second child key which is also a directory
+		err = kv.Put(subfolderKey, WriteWithBytes([]byte("second")))
+		assert.NoError(err)
+
+		// Put child keys under secondKey
+		for i := 1; i <= 3; i++ {
+			key := "testList/subfolder/key" + strconv.Itoa(i)
+			err := kv.Put(key, WriteWithBytes([]byte("value")))
+			assert.NoError(err)
+		}
+
+		// List should work and return child entries
+		page, err := kv.ListPage("testList/subfolder/key")
+		assert.NoError(err)
+		assert.NotNil(page)
+		assert.Equal(3, len(page.Keys))
+
+		// List should work and return all child entries
+		page, err = kv.ListPage("")
+		assert.NoError(err)
+		assert.NotNil(page)
+		assert.Equal(6, len(page.Keys))
+
+		// List should work and return all child entries
+		page, err = kv.ListPage("", ReadWithLimit(5))
+		assert.NoError(err)
+		assert.NotNil(page)
+		assert.Equal(5, len(page.Keys))
+
+		page, err = kv.ListPage("", ReadWithStartKey(page.LastKey))
+		assert.NoError(err)
+		assert.NotNil(page)
+		assert.Equal(1, len(page.Keys))
 
 	})
 }
