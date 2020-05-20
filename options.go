@@ -17,6 +17,13 @@ type WriteOptions struct {
 	previous *KVPair // Optional, previous value used to assert if the record has been modified before an atomic update
 }
 
+// Append append more options which supports conditional addition
+func (wo *WriteOptions) Append(opts ...WriteOption) {
+	for _, opt := range opts {
+		opt(wo)
+	}
+}
+
 // NewWriteOptions create write options, assign defaults then accept overrides
 func NewWriteOptions(opts ...WriteOption) *WriteOptions {
 
@@ -70,6 +77,13 @@ type ReadOptions struct {
 	consistent bool
 	limit      *int64
 	startKey   *string
+}
+
+// Append append more options which supports conditional addition
+func (ro *ReadOptions) Append(opts ...ReadOption) {
+	for _, opt := range opts {
+		opt(ro)
+	}
 }
 
 // NewReadOptions create read options, assign defaults then accept overrides
