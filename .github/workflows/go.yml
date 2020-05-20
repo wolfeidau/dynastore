@@ -18,3 +18,8 @@ jobs:
 
       - name: CI Tasks
         run: make ci
+      - name: Coveralls
+        uses: coverallsapp/github-action@v1.0.1
+        with:
+            github-token: ${{ secrets.github_token }}
+            path-to-lcov: coverage.lcov        
