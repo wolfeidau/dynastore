@@ -1,4 +1,4 @@
-# dynalock 
+# dynastore 
 
 This is a small K/V library written Go, which uses [AWS DynamoDB](https://aws.amazon.com/dynamodb/) as the data store.
 
@@ -6,7 +6,7 @@ It supports create, read, update and delete (CRUD) for key/value pairs.
 
 [![GitHub Actions status](https://github.com/wolfeidau/dynastore/workflows/Go/badge.svg?branch=master)](https://github.com/wolfeidau/dynastore/actions?query=workflow%3AGo)
 [![Go Report Card](https://goreportcard.com/badge/github.com/wolfeidau/dynastore)](https://goreportcard.com/report/github.com/wolfeidau/dynastore)
-[![Documentation](https://godoc.org/github.com/wolfeidau/dynastore?status.svg)](https://godoc.org/github.com/wolfeidau/dynastore)
+[![Documentation](https://godoc.org/github.com/wolfeidau/dynastore?status.svg)](https://godoc.org/github.com/wolfeidau/dynastore) [![Coverage Status](https://coveralls.io/repos/github/wolfeidau/dynastore/badge.svg?branch=master)](https://coveralls.io/github/wolfeidau/dynastore?branch=master)
 
 # What is the problem?
 
