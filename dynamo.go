@@ -49,6 +49,18 @@ func (kv *KVPair) BytesValue() []byte {
 	return buf
 }
 
+// StringValue use the attribute to return a slice of bytes, an empty string will be returned if it is empty or nil
+func (kv *KVPair) StringValue() string {
+	var str string
+
+	err := dynamodbattribute.Unmarshal(kv.value, &str)
+	if err != nil {
+		return str
+	}
+
+	return str
+}
+
 // DecodeValue decode using dynamodbattribute
 func (kv *KVPair) DecodeValue(out interface{}) error {
 	return dynamodbattribute.Unmarshal(kv.value, out)
