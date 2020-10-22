@@ -135,7 +135,7 @@ func testPutGetDeleteExists(t *testing.T, session Session) {
 	_, err := kv.Get("testPutGetDelete_not_exist_key")
 	assert.Equal(ErrKeyNotFound, err)
 
-	value := []byte("bar")
+	value := "bar"
 	for _, key := range []string{
 		"testPutGetDeleteExists",
 		"testPutGetDeleteExists/",
@@ -146,14 +146,14 @@ func testPutGetDeleteExists(t *testing.T, session Session) {
 		t.Run(key, func(t *testing.T) {
 
 			// Put the key
-			err = kv.Put(key, WriteWithBytes(value), WriteWithTTL(2*time.Second))
+			err = kv.Put(key, WriteWithString(value), WriteWithTTL(2*time.Second))
 			assert.NoError(err)
 
 			// Get should return the value and an incremented index
 			pair, err := kv.Get(key)
 			assert.NoError(err)
 			assert.NotNil(pair)
-			assert.Equal(value, pair.BytesValue())
+			assert.Equal(value, pair.StringValue())
 			assert.NotEqual(0, pair.Expires)
 
 			assert.NotEqual(0, pair.Version)
@@ -183,14 +183,14 @@ func testPutGetDeleteExists(t *testing.T, session Session) {
 	key := "something/withoutExpires"
 
 	// Put the key
-	err = kv.Put(key, WriteWithBytes(value), WriteWithNoExpires(), WriteWithNoExpires())
+	err = kv.Put(key, WriteWithString(value), WriteWithNoExpires(), WriteWithNoExpires())
 	assert.NoError(err)
 
 	// Get should return the value and an incremented index
 	pair, err := kv.Get(key)
 	assert.NoError(err)
 	assert.NotNil(pair)
-	assert.Equal(value, pair.BytesValue())
+	assert.Equal(value, pair.StringValue())
 	assert.Equal(int64(0), pair.Expires)
 }
 
