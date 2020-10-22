@@ -1,3 +1,5 @@
 .envrc
 bin
 .idea
+coverage.*
+
