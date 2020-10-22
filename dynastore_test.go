@@ -217,7 +217,7 @@ func testAtomicPut(t *testing.T, session Session) {
 		assert.NotEqual(0, pair.Version)
 
 		// This CAS should fail: previous exists.
-		success, _, err := kv.AtomicPut(key, WriteWithBytes([]byte("WORLD")))
+		success, _, err := kv.AtomicPut(key, WriteWithString("WORLD"))
 		assert.Error(err)
 		assert.False(success)
 

@@ -51,10 +51,17 @@ func WriteWithNoExpires() WriteOption {
 	}
 }
 
-// WriteWithBytes byte slice to the key which is written
+// WriteWithBytes encode raw data using base64 and assign this value to the key which is written
 func WriteWithBytes(val []byte) WriteOption {
 	return func(opts *WriteOptions) {
 		opts.value = aws.String(base64.StdEncoding.EncodeToString(val))
+	}
+}
+
+// WriteWithString assign this value to the key which is written
+func WriteWithString(val string) WriteOption {
+	return func(opts *WriteOptions) {
+		opts.value = aws.String(val)
 	}
 }
 
