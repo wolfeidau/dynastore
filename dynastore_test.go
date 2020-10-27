@@ -26,7 +26,6 @@ var (
 )
 
 func isReady(ctx context.Context, c dktest.ContainerInfo) bool {
-
 	dbSvc := dynamodb.New(mustSession(c.FirstPort()))
 
 	_, err := dbSvc.ListTablesWithContext(ctx, &dynamodb.ListTablesInput{})
@@ -35,10 +34,8 @@ func isReady(ctx context.Context, c dktest.ContainerInfo) bool {
 }
 
 func Test(t *testing.T) {
-
 	dktest.Run(t, "amazon/dynamodb-local:latest", opts,
 		func(t *testing.T, c dktest.ContainerInfo) {
-
 			assert := require.New(t)
 
 			dbSvc := dynamodb.New(mustSession(c.FirstPort()))
@@ -56,8 +53,7 @@ func Test(t *testing.T) {
 		})
 }
 
-func mustSession(hostIP string, hostPort string, err error) *session.Session {
-
+func mustSession(hostIP, hostPort string, err error) *session.Session {
 	if err != nil {
 		panic(err)
 	}
@@ -73,7 +69,6 @@ func mustSession(hostIP string, hostPort string, err error) *session.Session {
 }
 
 func ensureVersionTable(dbSvc dynamodbiface.DynamoDBAPI, tableName string) error {
-
 	_, err := dbSvc.CreateTable(&dynamodb.CreateTableInput{
 		TableName: aws.String(tableName),
 		KeySchema: []*dynamodb.KeySchemaElement{
@@ -96,8 +91,7 @@ func ensureVersionTable(dbSvc dynamodbiface.DynamoDBAPI, tableName string) error
 
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case dynamodb.ErrCodeResourceInUseException:
+			if aerr.Code() == dynamodb.ErrCodeResourceInUseException {
 				return nil
 			}
 		}
@@ -125,11 +119,11 @@ func ensureVersionTable(dbSvc dynamodbiface.DynamoDBAPI, tableName string) error
 	return nil
 }
 
-func testPutGetDeleteExists(t *testing.T, session Session) {
+func testPutGetDeleteExists(t *testing.T, dSession Session) {
 	assert := require.New(t)
 
 	// , tableName: "testing-locks", partition: "agent"
-	kv := session.Table("testing-locks").Partition("agent")
+	kv := dSession.Table("testing-locks").Partition("agent")
 
 	// Get a not exist key should return ErrKeyNotFound
 	_, err := kv.Get("testPutGetDelete_not_exist_key")
@@ -142,15 +136,15 @@ func testPutGetDeleteExists(t *testing.T, session Session) {
 		"testPutGetDeleteExists/testbar/",
 		"testPutGetDeleteExists/testbar/testfoobar",
 	} {
-
 		t.Run(key, func(t *testing.T) {
-
 			// Put the key
 			err = kv.Put(key, WriteWithString(value), WriteWithTTL(2*time.Second))
 			assert.NoError(err)
 
+			var pair *KVPair
+
 			// Get should return the value and an incremented index
-			pair, err := kv.Get(key)
+			pair, err = kv.Get(key)
 			assert.NoError(err)
 			assert.NotNil(pair)
 			assert.Equal(value, pair.StringValue())
@@ -158,8 +152,10 @@ func testPutGetDeleteExists(t *testing.T, session Session) {
 
 			assert.NotEqual(0, pair.Version)
 
+			var exists bool
+
 			// Exists should return true
-			exists, err := kv.Exists(key)
+			exists, err = kv.Exists(key)
 			assert.NoError(err)
 			assert.True(exists)
 
@@ -194,14 +190,12 @@ func testPutGetDeleteExists(t *testing.T, session Session) {
 	assert.Equal(int64(0), pair.Expires)
 }
 
-func testAtomicPut(t *testing.T, session Session) {
-
+func testAtomicPut(t *testing.T, dSession Session) {
 	assert := require.New(t)
 
-	kv := session.Table("testing-locks").Partition("agent")
+	kv := dSession.Table("testing-locks").Partition("agent")
 
 	t.Run("AtomicPut", func(t *testing.T) {
-
 		key := "testAtomicPut"
 		value := []byte("world")
 
@@ -234,14 +228,12 @@ func testAtomicPut(t *testing.T, session Session) {
 	})
 }
 
-func testAtomicDelete(t *testing.T, session Session) {
-
+func testAtomicDelete(t *testing.T, dSession Session) {
 	assert := require.New(t)
 
-	kv := session.Table("testing-locks").Partition("agent")
+	kv := dSession.Table("testing-locks").Partition("agent")
 
 	t.Run("AtomicDelete", func(t *testing.T) {
-
 		key := "testAtomicDelete"
 		value := []byte("world")
 
@@ -274,19 +266,15 @@ func testAtomicDelete(t *testing.T, session Session) {
 		success, err = kv.AtomicDelete(key, pair)
 		assert.Equal(ErrKeyNotFound, err)
 		assert.False(success)
-
 	})
-
 }
 
-func testList(t *testing.T, session Session) {
-
+func testList(t *testing.T, dSession Session) {
 	assert := require.New(t)
 
-	kv := session.Table("testing-locks").Partition("agent")
+	kv := dSession.Table("testing-locks").Partition("agent")
 
 	t.Run("List", func(t *testing.T) {
-
 		childKey := "testList/child"
 		subfolderKey := "testList/subfolder"
 
@@ -301,7 +289,7 @@ func testList(t *testing.T, session Session) {
 		// Put child keys under secondKey
 		for i := 1; i <= 3; i++ {
 			key := "testList/subfolder/key" + strconv.Itoa(i)
-			err := kv.Put(key, WriteWithBytes([]byte("value")))
+			err = kv.Put(key, WriteWithBytes([]byte("value")))
 			assert.NoError(err)
 		}
 
@@ -310,18 +298,15 @@ func testList(t *testing.T, session Session) {
 		assert.NoError(err)
 		assert.NotNil(pairs)
 		assert.Equal(3, len(pairs))
-
 	})
 }
 
-func testListPage(t *testing.T, session Session) {
-
+func testListPage(t *testing.T, dSession Session) {
 	assert := require.New(t)
 
-	kv := session.Table("testing-locks").Partition("agent")
+	kv := dSession.Table("testing-locks").Partition("agent")
 
 	t.Run("ListPage", func(t *testing.T) {
-
 		childKey := "testList/child"
 		subfolderKey := "testList/subfolder"
 
@@ -336,7 +321,7 @@ func testListPage(t *testing.T, session Session) {
 		// Put child keys under secondKey
 		for i := 1; i <= 3; i++ {
 			key := "testList/subfolder/key" + strconv.Itoa(i)
-			err := kv.Put(key, WriteWithBytes([]byte("value")))
+			err = kv.Put(key, WriteWithBytes([]byte("value")))
 			assert.NoError(err)
 		}
 
@@ -362,6 +347,5 @@ func testListPage(t *testing.T, session Session) {
 		assert.NoError(err)
 		assert.NotNil(page)
 		assert.Equal(1, len(page.Keys))
-
 	})
 }

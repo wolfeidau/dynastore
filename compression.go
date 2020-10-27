@@ -27,7 +27,6 @@ func compressAndEncodeKey(key map[string]*dynamodb.AttributeValue) (string, erro
 }
 
 func decompressAndDecodeKey(key string) (map[string]*dynamodb.AttributeValue, error) {
-
 	data, err := base58.Decode(key)
 	if err != nil {
 		return nil, err
