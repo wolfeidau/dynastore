@@ -26,7 +26,6 @@ func (wo *WriteOptions) Append(opts ...WriteOption) {
 
 // NewWriteOptions create write options, assign defaults then accept overrides
 func NewWriteOptions(opts ...WriteOption) *WriteOptions {
-
 	// assign a place holder value to detect whether to assign the default TTL
 	writeOpts := &WriteOptions{}
 
@@ -96,7 +95,6 @@ func (ro *ReadOptions) Append(opts ...ReadOption) {
 // NewReadOptions create read options, assign defaults then accept overrides
 // enable the read consistent flag by default
 func NewReadOptions(opts ...ReadOption) *ReadOptions {
-
 	readOpts := &ReadOptions{
 		consistent: true,
 	}

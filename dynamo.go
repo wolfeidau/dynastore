@@ -96,7 +96,6 @@ type dynaPartition struct {
 
 // New construct a DynamoDB backed store with default session / service
 func New(cfgs ...*aws.Config) Session {
-
 	sess := session.Must(session.NewSession(cfgs...))
 	dynamoSvc := dynamodb.New(sess)
 
@@ -115,10 +114,9 @@ func (ddb *dynaPartition) GetPartitionName() string {
 
 // Put a value at the specified key
 func (ddb *dynaPartition) Put(key string, options ...WriteOption) error {
-
 	writeOptions := NewWriteOptions(options...)
 
-	update := buildUpdate(key, writeOptions)
+	update := buildUpdate(writeOptions)
 
 	expr, err := dexp.NewBuilder().WithUpdate(update).Build()
 	if err != nil {
@@ -142,7 +140,6 @@ func (ddb *dynaPartition) Put(key string, options ...WriteOption) error {
 
 // Exists if a Key exists in the store
 func (ddb *dynaPartition) Exists(key string, options ...ReadOption) (bool, error) {
-
 	readOptions := NewReadOptions(options...)
 
 	res, err := ddb.session.GetItem(&dynamodb.GetItemInput{
@@ -169,7 +166,6 @@ func (ddb *dynaPartition) Exists(key string, options ...ReadOption) (bool, error
 
 // Get a value given its key
 func (ddb *dynaPartition) Get(key string, options ...ReadOption) (*KVPair, error) {
-
 	readOptions := NewReadOptions(options...)
 
 	res, err := ddb.getKey(key, readOptions)
@@ -230,14 +226,16 @@ func (ddb *dynaPartition) ListPage(prefix string, options ...ReadOption) (*KVPai
 		Limit:                     readOptions.limit,
 	}
 
+	var decodedKey map[string]*dynamodb.AttributeValue
+
 	// avoid either a nil or empty value
 	if startKey := aws.StringValue(readOptions.startKey); startKey != "" {
-		key, err := decompressAndDecodeKey(startKey)
+		decodedKey, err = decompressAndDecodeKey(startKey)
 		if err != nil {
 			return nil, err
 		}
 
-		si.ExclusiveStartKey = key
+		si.ExclusiveStartKey = decodedKey
 	}
 
 	res, err := ddb.session.Query(si)
@@ -247,8 +245,10 @@ func (ddb *dynaPartition) ListPage(prefix string, options ...ReadOption) (*KVPai
 
 	results := make([]*KVPair, len(res.Items))
 
+	var val *KVPair
+
 	for n, item := range res.Items {
-		val, err := DecodeItem(item)
+		val, err = DecodeItem(item)
 		if err != nil {
 			return nil, err
 		}
@@ -270,7 +270,6 @@ func (ddb *dynaPartition) ListPage(prefix string, options ...ReadOption) (*KVPai
 
 // List the content of a given prefix
 func (ddb *dynaPartition) List(prefix string, options ...ReadOption) ([]*KVPair, error) {
-
 	readOptions := NewReadOptions(options...)
 
 	si := &dynamodb.QueryInput{
@@ -331,10 +330,9 @@ func (ddb *dynaPartition) List(prefix string, options ...ReadOption) ([]*KVPair,
 
 // AtomicPut Atomic CAS operation on a single value.
 func (ddb *dynaPartition) AtomicPut(key string, options ...WriteOption) (bool, *KVPair, error) {
-
 	writeOptions := NewWriteOptions(options...)
 
-	update := buildUpdate(key, writeOptions)
+	update := buildUpdate(writeOptions)
 	condition := updateWithConditions(writeOptions.previous)
 
 	expr, err := dexp.NewBuilder().WithUpdate(update).WithCondition(condition).Build()
@@ -380,7 +378,6 @@ func (ddb *dynaPartition) AtomicPut(key string, options ...WriteOption) (bool, *
 //
 // FIXME: should the second case just return false, nil?
 func (ddb *dynaPartition) AtomicDelete(key string, previous *KVPair) (bool, error) {
-
 	getRes, err := ddb.getKey(key, NewReadOptions())
 	if err != nil {
 		return false, err
@@ -429,8 +426,7 @@ func (ddb *dynaPartition) getKey(key string, options *ReadOptions) (*dynamodb.Ge
 	})
 }
 
-func buildUpdate(key string, options *WriteOptions) dexp.UpdateBuilder {
-
+func buildUpdate(options *WriteOptions) dexp.UpdateBuilder {
 	update := dexp.Add(dexp.Name("version"), dexp.Value(1))
 
 	// if a value assigned
@@ -456,9 +452,7 @@ func buildKeys(partition, key string) map[string]*dynamodb.AttributeValue {
 }
 
 func updateWithConditions(previous *KVPair) dexp.ConditionBuilder {
-
 	if previous != nil {
-
 		// "version = :lastRevision AND ( attribute_not_exists(expires) OR (attribute_exists(expires) AND expires > :timeNow) )"
 
 		// the previous kv is in the DB and is at the expected revision, also if it has a TTL set it is NOT expired.
