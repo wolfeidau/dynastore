@@ -68,10 +68,6 @@ func WriteWithString(val string) WriteOption {
 func WriteWithPreviousKV(previous *KVPair) WriteOption {
 	return func(opts *WriteOptions) {
 		opts.previous = previous
-		if opts.previous != nil {
-			v := time.Until(time.Unix(opts.previous.Expires, 0)) // update the TTL to the remaining time
-			opts.ttl = &v
-		}
 	}
 }
 
