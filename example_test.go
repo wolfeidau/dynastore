@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/wolfeidau/dynastore"
 )
 
@@ -25,9 +23,10 @@ type Index struct {
 	Created string `json:"created"`
 }
 
-func (cf *Index) ToFields() map[string]*dynamodb.AttributeValue {
-	attr, _ := dynamodbattribute.MarshalMap(cf)
-	return attr
+func (cf *Index) ToFields() map[string]string {
+	return map[string]string{
+		"created": cf.Created,
+	}
 }
 
 func ExamplePartition_AtomicPut() {

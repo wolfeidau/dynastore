@@ -67,9 +67,15 @@ func WriteWithString(val string) WriteOption {
 }
 
 // WriteWithFields assign fields to the top level record, this is used to assign attributes used in indexes
-func WriteWithFields(fields map[string]*dynamodb.AttributeValue) WriteOption {
+func WriteWithFields(fields map[string]string) WriteOption {
+	attr := map[string]*dynamodb.AttributeValue{}
+
+	for k, v := range fields {
+		attr[k] = &dynamodb.AttributeValue{S: aws.String(v)}
+	}
+
 	return func(opts *WriteOptions) {
-		opts.fields = fields
+		opts.fields = attr
 	}
 }
 
