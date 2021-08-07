@@ -15,6 +15,9 @@ var (
 
 	// ErrKeyModified record has been modified, this probably means someone beat you to the change/lock
 	ErrKeyModified = errors.New("key has been modified")
+
+	// ErrReservedField put contained an field in the write options which was reserved
+	ErrReservedField = errors.New("fields contained reserved attribute name")
 )
 
 // Session represents the backend K/V storage using one or more DynamoDB tables containing partitions.

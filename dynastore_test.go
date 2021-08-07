@@ -3,6 +3,7 @@ package dynastore
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"strconv"
 	"testing"
 	"time"
@@ -24,6 +25,10 @@ const (
 var (
 	opts = dktest.Options{PortRequired: true, ReadyFunc: isReady}
 )
+
+type indexFields struct {
+	Created string `json:"created"`
+}
 
 func isReady(ctx context.Context, c dktest.ContainerInfo) bool {
 	dbSvc := dynamodb.New(mustSession(c.FirstPort()))
@@ -49,6 +54,7 @@ func Test(t *testing.T) {
 			testList(t, dl)
 			testListPage(t, dl)
 			testAtomicPut(t, dl)
+			testAtomicPutIndex(t, dl)
 			testAtomicDelete(t, dl)
 		})
 }
@@ -75,9 +81,20 @@ func ensureVersionTable(dbSvc dynamodbiface.DynamoDBAPI, tableName string) error
 			{AttributeName: aws.String("id"), KeyType: aws.String(dynamodb.KeyTypeHash)},
 			{AttributeName: aws.String("name"), KeyType: aws.String(dynamodb.KeyTypeRange)},
 		},
+		LocalSecondaryIndexes: []*dynamodb.LocalSecondaryIndex{
+			{
+				IndexName: aws.String("idx_created"),
+				KeySchema: []*dynamodb.KeySchemaElement{
+					{AttributeName: aws.String("id"), KeyType: aws.String(dynamodb.KeyTypeHash)},
+					{AttributeName: aws.String("created"), KeyType: aws.String(dynamodb.KeyTypeRange)},
+				},
+				Projection: &dynamodb.Projection{ProjectionType: aws.String(dynamodb.ProjectionTypeAll)},
+			},
+		},
 		AttributeDefinitions: []*dynamodb.AttributeDefinition{
 			{AttributeName: aws.String("id"), AttributeType: aws.String(dynamodb.ScalarAttributeTypeS)},
 			{AttributeName: aws.String("name"), AttributeType: aws.String(dynamodb.ScalarAttributeTypeS)},
+			{AttributeName: aws.String("created"), AttributeType: aws.String(dynamodb.ScalarAttributeTypeS)},
 		},
 		ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
 			ReadCapacityUnits:  aws.Int64(1),
@@ -129,7 +146,11 @@ func testPutGetDeleteExists(t *testing.T, dSession Session) {
 	_, err := kv.Get("testPutGetDelete_not_exist_key")
 	assert.Equal(ErrKeyNotFound, err)
 
-	value := "bar"
+	data, err := ioutil.ReadFile("fixtures/pr.json")
+	assert.NoError(err)
+
+	value := string(data)
+
 	for _, key := range []string{
 		"testPutGetDeleteExists",
 		"testPutGetDeleteExists/",
@@ -225,6 +246,35 @@ func testAtomicPut(t *testing.T, dSession Session) {
 		success, _, err = kv.AtomicPut(key, WriteWithPreviousKV(pair), WriteWithBytes([]byte("WORLDWORLD")))
 		assert.Equal(err, ErrKeyModified)
 		assert.False(success)
+	})
+}
+
+func testAtomicPutIndex(t *testing.T, dSession Session) {
+	assert := require.New(t)
+
+	kv := dSession.Table("testing-locks").Partition("agent")
+
+	t.Run("AtomicPut", func(t *testing.T) {
+		key := "testAtomicPutIndex"
+		value := []byte("world")
+
+		timeStamp := "20200103T1100Z"
+
+		// Put the key
+		err := kv.Put(key, WriteWithBytes(value), WriteWithFields(map[string]*dynamodb.AttributeValue{
+			"created": {S: aws.String(timeStamp)},
+		}))
+		assert.NoError(err)
+
+		// Get should return the value and an incremented index
+		page, err := kv.ListPage(timeStamp, ReadWithLocalIndex("idx_created", "created"))
+		assert.NoError(err)
+		assert.Equal(1, len(page.Keys))
+
+		idxFields := new(indexFields)
+		err = page.Keys[0].DecodeFields(idxFields)
+		assert.NoError(err)
+		assert.Equal(timeStamp, idxFields.Created)
 	})
 }
 
