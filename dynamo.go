@@ -19,6 +19,10 @@ const (
 	listDefaultTimeout = time.Second * 10
 )
 
+var (
+	reservedFields = map[string]string{"id": "S", "name": "S", "version": "N", "expires": "N", "payload": "A"}
+)
+
 // KVPairPage provides a page of keys with next token
 // to enable paging
 type KVPairPage struct {
@@ -35,7 +39,8 @@ type KVPair struct {
 	Version   int64  `dynamodbav:"version"`
 	Expires   int64  `dynamodbav:"expires"`
 	// handled separately to enable an number of stored values
-	value *dynamodb.AttributeValue
+	value  *dynamodb.AttributeValue
+	fields map[string]*dynamodb.AttributeValue
 }
 
 // BytesValue use the attribute to return a slice of bytes, a nil will be returned if it is empty or nil
@@ -65,6 +70,16 @@ func (kv *KVPair) StringValue() string {
 // DecodeValue decode using dynamodbattribute
 func (kv *KVPair) DecodeValue(out interface{}) error {
 	return dynamodbattribute.Unmarshal(kv.value, out)
+}
+
+// DecodeFields decode the extra fields, which are typically index attributes, stored in the DynamoDB record using dynamodbattribute
+func (kv *KVPair) DecodeFields(out interface{}) error {
+	return dynamodbattribute.UnmarshalMap(kv.fields, out)
+}
+
+func isReservedField(s string) bool {
+	_, ok := reservedFields[s]
+	return ok
 }
 
 type dynaSession struct {
@@ -117,11 +132,14 @@ func (ddb *dynaPartition) GetPartitionName() string {
 func (ddb *dynaPartition) Put(key string, options ...WriteOption) error {
 	writeOptions := NewWriteOptions(options...)
 
-	update := buildUpdate(writeOptions)
+	update, err := buildUpdate(writeOptions)
+	if err != nil {
+		return fmt.Errorf("failed to build update: %w", err)
+	}
 
 	expr, err := dexp.NewBuilder().WithUpdate(update).Build()
 	if err != nil {
-		return fmt.Errorf("failed to build update: %w", err)
+		return fmt.Errorf("failed to build update expression: %w", err)
 	}
 
 	_, err = ddb.session.UpdateItem(&dynamodb.UpdateItemInput{
@@ -207,10 +225,16 @@ func (ddb *dynaPartition) Delete(key string) error {
 func (ddb *dynaPartition) ListPage(prefix string, options ...ReadOption) (*KVPairPage, error) {
 	readOptions := NewReadOptions(options...)
 
+	rangeKey := "name"
+
+	if readOptions.index != nil {
+		rangeKey = readOptions.index.attribute
+	}
+
 	key := dexp.Key("id").Equal(dexp.Value(ddb.partition))
 
 	if prefix != "" {
-		key = key.And(dexp.Key("name").BeginsWith(prefix))
+		key = key.And(dexp.Key(rangeKey).BeginsWith(prefix))
 	}
 
 	expr, err := dexp.NewBuilder().WithKeyCondition(key).Build()
@@ -225,6 +249,10 @@ func (ddb *dynaPartition) ListPage(prefix string, options ...ReadOption) (*KVPai
 		ExpressionAttributeValues: expr.Values(),
 		ConsistentRead:            aws.Bool(readOptions.consistent),
 		Limit:                     readOptions.limit,
+	}
+
+	if readOptions.index != nil {
+		si.IndexName = aws.String(readOptions.index.name)
 	}
 
 	var decodedKey map[string]*dynamodb.AttributeValue
@@ -333,12 +361,16 @@ func (ddb *dynaPartition) List(prefix string, options ...ReadOption) ([]*KVPair,
 func (ddb *dynaPartition) AtomicPut(key string, options ...WriteOption) (bool, *KVPair, error) {
 	writeOptions := NewWriteOptions(options...)
 
-	update := buildUpdate(writeOptions)
+	update, err := buildUpdate(writeOptions)
+	if err != nil {
+		return false, nil, fmt.Errorf("failed to build update: %w", err)
+	}
+
 	condition := updateWithConditions(writeOptions.previous)
 
 	expr, err := dexp.NewBuilder().WithUpdate(update).WithCondition(condition).Build()
 	if err != nil {
-		return false, nil, err
+		return false, nil, fmt.Errorf("failed to build update expression: %w", err)
 	}
 
 	res, err := ddb.session.UpdateItem(&dynamodb.UpdateItemInput{
@@ -427,12 +459,21 @@ func (ddb *dynaPartition) getKey(key string, options *ReadOptions) (*dynamodb.Ge
 	})
 }
 
-func buildUpdate(options *WriteOptions) dexp.UpdateBuilder {
+func buildUpdate(options *WriteOptions) (dexp.UpdateBuilder, error) {
 	update := dexp.Add(dexp.Name("version"), dexp.Value(1))
 
 	// if a value assigned
 	if options.value != nil {
-		update = update.Set(dexp.Name("payload"), dexp.Value(aws.StringValue(options.value)))
+		update = update.Set(dexp.Name("payload"), dexp.Value(options.value))
+	}
+
+	if options.fields != nil {
+		for k, v := range options.fields {
+			if isReservedField(k) {
+				return update, ErrReservedField
+			}
+			update = update.Set(dexp.Name(k), dexp.Value(v))
+		}
 	}
 
 	// if a TTL assigned
@@ -442,7 +483,7 @@ func buildUpdate(options *WriteOptions) dexp.UpdateBuilder {
 		update = update.Set(dexp.Name("expires"), dexp.Value(ttlVal))
 	}
 
-	return update
+	return update, nil
 }
 
 func buildKeys(partition, key string) map[string]*dynamodb.AttributeValue {
@@ -501,6 +542,14 @@ func DecodeItem(item map[string]*dynamodb.AttributeValue) (*KVPair, error) {
 
 	if val, ok := item["payload"]; ok {
 		kv.value = val
+	}
+
+	kv.fields = make(map[string]*dynamodb.AttributeValue)
+
+	for k, v := range item {
+		if !isReservedField(k) {
+			kv.fields[k] = v
+		}
 	}
 
 	return kv, nil

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
 // WriteOption assign various settings to the write options
@@ -12,6 +13,7 @@ type WriteOption func(opts *WriteOptions)
 
 // WriteOptions contains optional request parameters
 type WriteOptions struct {
+	fields   map[string]*dynamodb.AttributeValue
 	value    *string
 	ttl      *time.Duration
 	previous *KVPair // Optional, previous value used to assert if the record has been modified before an atomic update
@@ -64,6 +66,13 @@ func WriteWithString(val string) WriteOption {
 	}
 }
 
+// WriteWithFields assign fields to the top level record, this is used to assign attributes used in indexes
+func WriteWithFields(fields map[string]*dynamodb.AttributeValue) WriteOption {
+	return func(opts *WriteOptions) {
+		opts.fields = fields
+	}
+}
+
 // WriteWithPreviousKV previous KV which will be checked prior to update
 func WriteWithPreviousKV(previous *KVPair) WriteOption {
 	return func(opts *WriteOptions) {
@@ -74,11 +83,17 @@ func WriteWithPreviousKV(previous *KVPair) WriteOption {
 // ReadOption assign various settings to the read options
 type ReadOption func(opts *ReadOptions)
 
+type localIndex struct {
+	name      string
+	attribute string
+}
+
 // ReadOptions contains optional request parameters
 type ReadOptions struct {
 	consistent bool
 	limit      *int64
 	startKey   *string
+	index      *localIndex
 }
 
 // Append append more options which supports conditional addition
@@ -122,5 +137,16 @@ func ReadWithStartKey(key string) ReadOption {
 func ReadWithLimit(limit int64) ReadOption {
 	return func(opts *ReadOptions) {
 		opts.limit = aws.Int64(limit)
+	}
+}
+
+// ReadWithIndex preform a read using a local index with the given name
+// and the name of the hash attribute.
+func ReadWithLocalIndex(name, attribute string) ReadOption {
+	return func(opts *ReadOptions) {
+		opts.index = &localIndex{
+			name:      name,
+			attribute: attribute,
+		}
 	}
 }
