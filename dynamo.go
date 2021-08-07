@@ -2,6 +2,7 @@ package dynastore
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -120,7 +121,7 @@ func (ddb *dynaPartition) Put(key string, options ...WriteOption) error {
 
 	expr, err := dexp.NewBuilder().WithUpdate(update).Build()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to build update: %w", err)
 	}
 
 	_, err = ddb.session.UpdateItem(&dynamodb.UpdateItemInput{
@@ -132,7 +133,7 @@ func (ddb *dynaPartition) Put(key string, options ...WriteOption) error {
 		ReturnValues:              aws.String(dynamodb.ReturnValueAllNew),
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to update item: %w", err)
 	}
 
 	return nil
@@ -149,7 +150,7 @@ func (ddb *dynaPartition) Exists(key string, options ...ReadOption) (bool, error
 	})
 
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to get item: %w", err)
 	}
 
 	if res.Item == nil {
@@ -170,7 +171,7 @@ func (ddb *dynaPartition) Get(key string, options ...ReadOption) (*KVPair, error
 
 	res, err := ddb.getKey(key, readOptions)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get by key: %w", err)
 	}
 	if res.Item == nil {
 		return nil, ErrKeyNotFound
@@ -183,7 +184,7 @@ func (ddb *dynaPartition) Get(key string, options ...ReadOption) (*KVPair, error
 
 	item, err := DecodeItem(res.Item)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode item: %w", err)
 	}
 
 	return item, nil
@@ -196,7 +197,7 @@ func (ddb *dynaPartition) Delete(key string) error {
 		Key:       buildKeys(ddb.partition, key),
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to delete item: %w", err)
 	}
 
 	return nil
@@ -214,7 +215,7 @@ func (ddb *dynaPartition) ListPage(prefix string, options ...ReadOption) (*KVPai
 
 	expr, err := dexp.NewBuilder().WithKeyCondition(key).Build()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to build exp: %w", err)
 	}
 
 	si := &dynamodb.QueryInput{
@@ -232,7 +233,7 @@ func (ddb *dynaPartition) ListPage(prefix string, options ...ReadOption) (*KVPai
 	if startKey := aws.StringValue(readOptions.startKey); startKey != "" {
 		decodedKey, err = decompressAndDecodeKey(startKey)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to decompress key: %w", err)
 		}
 
 		si.ExclusiveStartKey = decodedKey
@@ -240,7 +241,7 @@ func (ddb *dynaPartition) ListPage(prefix string, options ...ReadOption) (*KVPai
 
 	res, err := ddb.session.Query(si)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to run query: %w", err)
 	}
 
 	results := make([]*KVPair, len(res.Items))
@@ -250,7 +251,7 @@ func (ddb *dynaPartition) ListPage(prefix string, options ...ReadOption) (*KVPai
 	for n, item := range res.Items {
 		val, err = DecodeItem(item)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to run decode item: %w", err)
 		}
 
 		results[n] = val
@@ -261,7 +262,7 @@ func (ddb *dynaPartition) ListPage(prefix string, options ...ReadOption) (*KVPai
 	if len(res.LastEvaluatedKey) != 0 {
 		page.LastKey, err = compressAndEncodeKey(res.LastEvaluatedKey)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to compress key: %w", err)
 		}
 	}
 
@@ -302,7 +303,7 @@ func (ddb *dynaPartition) List(prefix string, options ...ReadOption) ([]*KVPair,
 			return true
 		})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to query table: %w", err)
 	}
 
 	if len(items) == 0 {
@@ -314,7 +315,7 @@ func (ddb *dynaPartition) List(prefix string, options ...ReadOption) ([]*KVPair,
 	for _, item := range items {
 		val, err := DecodeItem(item)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to decode item: %w", err)
 		}
 
 		// skip records which are expired
@@ -364,7 +365,7 @@ func (ddb *dynaPartition) AtomicPut(key string, options ...WriteOption) (bool, *
 
 	item, err := DecodeItem(res.Attributes)
 	if err != nil {
-		return false, nil, err
+		return false, nil, fmt.Errorf("failed to decode item: %w", err)
 	}
 
 	return true, item, nil
@@ -391,7 +392,7 @@ func (ddb *dynaPartition) AtomicDelete(key string, previous *KVPair) (bool, erro
 
 	expr, err := dexp.NewBuilder().WithCondition(cond).Build()
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to build expression: %w", err)
 	}
 
 	req := &dynamodb.DeleteItemInput{
@@ -409,7 +410,7 @@ func (ddb *dynaPartition) AtomicDelete(key string, previous *KVPair) (bool, erro
 				return false, ErrKeyNotFound
 			}
 		}
-		return false, err
+		return false, fmt.Errorf("failed to delete item: %w", err)
 	}
 
 	return true, nil
