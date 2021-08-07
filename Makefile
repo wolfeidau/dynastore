@@ -8,7 +8,9 @@ bin/golangci-lint: bin/golangci-lint-${GOLANGCI_VERSION}
 bin/golangci-lint-${GOLANGCI_VERSION}:
 	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | BINARY=golangci-lint bash -s -- v${GOLANGCI_VERSION}
 	@mv bin/golangci-lint $@
+
 bin/gcov2lcov:
+	@go get github.com/jandelgado/gcov2lcov
 	@env GOBIN=$$PWD/bin GO111MODULE=on go install github.com/jandelgado/gcov2lcov
 
 lint: bin/golangci-lint ##=> Lint all the things
@@ -17,7 +19,7 @@ lint: bin/golangci-lint ##=> Lint all the things
 .PHONY: lint
 
 clean: ##=> Clean all the things
-	$(info [+] Clean all the things...")
+	$(info [+] Clean all the things...)
 .PHONY: clean
 
 test: bin/gcov2lcov
