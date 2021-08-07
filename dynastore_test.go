@@ -261,8 +261,8 @@ func testAtomicPutIndex(t *testing.T, dSession Session) {
 		timeStamp := "20200103T1100Z"
 
 		// Put the key
-		err := kv.Put(key, WriteWithBytes(value), WriteWithFields(map[string]*dynamodb.AttributeValue{
-			"created": {S: aws.String(timeStamp)},
+		err := kv.Put(key, WriteWithBytes(value), WriteWithFields(map[string]string{
+			"created": timeStamp,
 		}))
 		assert.NoError(err)
 
