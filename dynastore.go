@@ -38,6 +38,32 @@ type Table interface {
 
 	// Partition returns a partition store
 	Partition(partitionName string) Partition
+
+	// Put a value at the specified key
+	PutWithContext(ctx context.Context, partitionKey, sortKey string, options ...WriteOption) error
+
+	// Get a value given its key
+	GetWithContext(ctx context.Context, partitionKey, sortKey string, options ...ReadOption) (*KVPair, error)
+
+	// List the content of the given prefix and return a page which contains the key
+	// and includes a last key if there were more records.
+	//
+	// The ReadWithStartKey can be used to pass the key to the next call.
+	ListPageWithContext(ctx context.Context, partitionKey, prefix string, options ...ReadOption) (*KVPairPage, error)
+
+	// Delete the value at the specified key
+	DeleteWithContext(ctx context.Context, partitionKey, sortKey string) error
+
+	// Verify if a Key exists in the store
+	ExistsWithContext(ctx context.Context, partitionKey, sortKey string, options ...ReadOption) (bool, error)
+
+	// Atomic CAS operation on a single value.
+	// Pass previous = nil to create a new key.
+	// Pass previous = kv to update an existing value.
+	AtomicPutWithContext(ctx context.Context, partitionKey, sortKey string, options ...WriteOption) (bool, *KVPair, error)
+
+	// Atomic delete of a single value
+	AtomicDeleteWithContext(ctx context.Context, partitionKey, sortKey string, previous *KVPair) (bool, error)
 }
 
 // Partition a partition represents a grouping of data within a DynamoDB table.
@@ -47,16 +73,16 @@ type Partition interface {
 	GetPartitionName() string
 
 	// Put a value at the specified key
-	Put(key string, options ...WriteOption) error
+	Put(sortKey string, options ...WriteOption) error
 
 	// Put a value at the specified key
-	PutWithContext(ctx context.Context, key string, options ...WriteOption) error
+	PutWithContext(ctx context.Context, sortKey string, options ...WriteOption) error
 
 	// Get a value given its key
 	Get(key string, options ...ReadOption) (*KVPair, error)
 
 	// Get a value given its key
-	GetWithContext(ctx context.Context, key string, options ...ReadOption) (*KVPair, error)
+	GetWithContext(ctx context.Context, sortKey string, options ...ReadOption) (*KVPair, error)
 
 	// List the content of a given prefix
 	List(prefix string, options ...ReadOption) ([]*KVPair, error)
@@ -77,32 +103,32 @@ type Partition interface {
 	ListPageWithContext(ctx context.Context, prefix string, options ...ReadOption) (*KVPairPage, error)
 
 	// Delete the value at the specified key
-	Delete(key string) error
+	Delete(sortKey string) error
 
 	// Delete the value at the specified key
-	DeleteWithContext(ctx context.Context, key string) error
+	DeleteWithContext(ctx context.Context, sortKey string) error
 
 	// Verify if a Key exists in the store
-	Exists(key string, options ...ReadOption) (bool, error)
+	Exists(sortKey string, options ...ReadOption) (bool, error)
 
 	// Verify if a Key exists in the store
-	ExistsWithContext(ctx context.Context, key string, options ...ReadOption) (bool, error)
+	ExistsWithContext(ctx context.Context, sortKey string, options ...ReadOption) (bool, error)
 
 	// Atomic CAS operation on a single value.
 	// Pass previous = nil to create a new key.
 	// Pass previous = kv to update an existing value.
-	AtomicPut(key string, options ...WriteOption) (bool, *KVPair, error)
+	AtomicPut(sortKey string, options ...WriteOption) (bool, *KVPair, error)
 
 	// Atomic CAS operation on a single value.
 	// Pass previous = nil to create a new key.
 	// Pass previous = kv to update an existing value.
-	AtomicPutWithContext(ctx context.Context, key string, options ...WriteOption) (bool, *KVPair, error)
+	AtomicPutWithContext(ctx context.Context, sortKey string, options ...WriteOption) (bool, *KVPair, error)
 
 	// Atomic delete of a single value
-	AtomicDelete(key string, previous *KVPair) (bool, error)
+	AtomicDelete(sortKey string, previous *KVPair) (bool, error)
 
 	// Atomic delete of a single value
-	AtomicDeleteWithContext(ctx context.Context, key string, previous *KVPair) (bool, error)
+	AtomicDeleteWithContext(ctx context.Context, sortKey string, previous *KVPair) (bool, error)
 }
 
 // StoreHooks is a container for callbacks that can instrument the datastore

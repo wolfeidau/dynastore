@@ -19,6 +19,11 @@ type indexFields struct {
 	Created string `json:"created"`
 }
 
+type globalIndexFields struct {
+	Username string `json:"pk1"`
+	Created  string `json:"sk1"`
+}
+
 func Test(t *testing.T) {
 	assert := require.New(t)
 
@@ -39,7 +44,8 @@ func Test(t *testing.T) {
 	testList(t, dl)
 	testListPage(t, dl)
 	testAtomicPut(t, dl)
-	testAtomicPutIndex(t, dl)
+	testAtomicPutLocalIndex(t, dl)
+	testAtomicPutGlobalIndex(t, dl)
 	testAtomicDelete(t, dl)
 }
 
@@ -60,10 +66,26 @@ func ensureVersionTable(dbSvc dynamodbiface.DynamoDBAPI, tableName string) error
 				Projection: &dynamodb.Projection{ProjectionType: aws.String(dynamodb.ProjectionTypeAll)},
 			},
 		},
+		GlobalSecondaryIndexes: []*dynamodb.GlobalSecondaryIndex{
+			{
+				IndexName: aws.String("idx_global_1"),
+				KeySchema: []*dynamodb.KeySchemaElement{
+					{AttributeName: aws.String("pk1"), KeyType: aws.String(dynamodb.KeyTypeHash)},
+					{AttributeName: aws.String("sk1"), KeyType: aws.String(dynamodb.KeyTypeRange)},
+				},
+				Projection: &dynamodb.Projection{ProjectionType: aws.String(dynamodb.ProjectionTypeAll)},
+				ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
+					ReadCapacityUnits:  aws.Int64(1),
+					WriteCapacityUnits: aws.Int64(1),
+				},
+			},
+		},
 		AttributeDefinitions: []*dynamodb.AttributeDefinition{
 			{AttributeName: aws.String("id"), AttributeType: aws.String(dynamodb.ScalarAttributeTypeS)},
 			{AttributeName: aws.String("name"), AttributeType: aws.String(dynamodb.ScalarAttributeTypeS)},
 			{AttributeName: aws.String("created"), AttributeType: aws.String(dynamodb.ScalarAttributeTypeS)},
+			{AttributeName: aws.String("pk1"), AttributeType: aws.String(dynamodb.ScalarAttributeTypeS)},
+			{AttributeName: aws.String("sk1"), AttributeType: aws.String(dynamodb.ScalarAttributeTypeS)},
 		},
 		ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
 			ReadCapacityUnits:  aws.Int64(1),
@@ -218,13 +240,13 @@ func testAtomicPut(t *testing.T, dSession *DynaSession) {
 	})
 }
 
-func testAtomicPutIndex(t *testing.T, dSession *DynaSession) {
+func testAtomicPutLocalIndex(t *testing.T, dSession *DynaSession) {
 	assert := require.New(t)
 
 	kv := dSession.Table("testing-locks").Partition("agent")
 
-	t.Run("AtomicPut", func(t *testing.T) {
-		key := "testAtomicPutIndex"
+	t.Run("AtomicPutLocalIndex", func(t *testing.T) {
+		key := "testAtomicPutLocalIndex"
 		value := []byte("world")
 
 		timeStamp := "20200103T1100Z"
@@ -243,6 +265,38 @@ func testAtomicPutIndex(t *testing.T, dSession *DynaSession) {
 		idxFields := new(indexFields)
 		err = page.Keys[0].DecodeFields(idxFields)
 		assert.NoError(err)
+		assert.Equal(timeStamp, idxFields.Created)
+	})
+}
+
+func testAtomicPutGlobalIndex(t *testing.T, dSession *DynaSession) {
+	assert := require.New(t)
+
+	kv := dSession.Table("testing-locks")
+
+	t.Run("AtomicPutGlobalIndex", func(t *testing.T) {
+		sortKey := "testAtomicPutGlobalIndex"
+		value := []byte("world")
+
+		username := "wolfeidau"
+		timeStamp := "20200103T1100Z"
+
+		// Put the key
+		err := kv.PutWithContext(context.TODO(), "agent", sortKey, WriteWithBytes(value), WriteWithFields(map[string]string{
+			"pk1": username,
+			"sk1": timeStamp,
+		}))
+		assert.NoError(err)
+
+		// Get should return the value and an incremented index
+		page, err := kv.ListPageWithContext(context.TODO(), username, timeStamp, ReadWithGlobalIndex("idx_global_1", "pk1", "sk1"))
+		assert.NoError(err)
+		assert.Equal(1, len(page.Keys))
+
+		idxFields := new(globalIndexFields)
+		err = page.Keys[0].DecodeFields(idxFields)
+		assert.NoError(err)
+		assert.Equal(username, idxFields.Username)
 		assert.Equal(timeStamp, idxFields.Created)
 	})
 }
