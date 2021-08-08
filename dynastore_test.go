@@ -48,7 +48,7 @@ func Test(t *testing.T) {
 			err := ensureVersionTable(dbSvc, "testing-locks")
 			assert.NoError(err)
 
-			dl := &dynaSession{DynamoDBAPI: dbSvc}
+			dl := &DynaSession{DynamoDBAPI: dbSvc}
 
 			testPutGetDeleteExists(t, dl)
 			testList(t, dl)
@@ -136,7 +136,7 @@ func ensureVersionTable(dbSvc dynamodbiface.DynamoDBAPI, tableName string) error
 	return nil
 }
 
-func testPutGetDeleteExists(t *testing.T, dSession Session) {
+func testPutGetDeleteExists(t *testing.T, dSession *DynaSession) {
 	assert := require.New(t)
 
 	// , tableName: "testing-locks", partition: "agent"
@@ -211,7 +211,7 @@ func testPutGetDeleteExists(t *testing.T, dSession Session) {
 	assert.Equal(int64(0), pair.Expires)
 }
 
-func testAtomicPut(t *testing.T, dSession Session) {
+func testAtomicPut(t *testing.T, dSession *DynaSession) {
 	assert := require.New(t)
 
 	kv := dSession.Table("testing-locks").Partition("agent")
@@ -249,7 +249,7 @@ func testAtomicPut(t *testing.T, dSession Session) {
 	})
 }
 
-func testAtomicPutIndex(t *testing.T, dSession Session) {
+func testAtomicPutIndex(t *testing.T, dSession *DynaSession) {
 	assert := require.New(t)
 
 	kv := dSession.Table("testing-locks").Partition("agent")
@@ -278,7 +278,7 @@ func testAtomicPutIndex(t *testing.T, dSession Session) {
 	})
 }
 
-func testAtomicDelete(t *testing.T, dSession Session) {
+func testAtomicDelete(t *testing.T, dSession *DynaSession) {
 	assert := require.New(t)
 
 	kv := dSession.Table("testing-locks").Partition("agent")
@@ -319,7 +319,7 @@ func testAtomicDelete(t *testing.T, dSession Session) {
 	})
 }
 
-func testList(t *testing.T, dSession Session) {
+func testList(t *testing.T, dSession *DynaSession) {
 	assert := require.New(t)
 
 	kv := dSession.Table("testing-locks").Partition("agent")
@@ -351,7 +351,7 @@ func testList(t *testing.T, dSession Session) {
 	})
 }
 
-func testListPage(t *testing.T, dSession Session) {
+func testListPage(t *testing.T, dSession *DynaSession) {
 	assert := require.New(t)
 
 	kv := dSession.Table("testing-locks").Partition("agent")
