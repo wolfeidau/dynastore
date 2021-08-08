@@ -8,6 +8,11 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
+const (
+	indexTypeLocal  = "local"
+	indexTypeGlobal = "global"
+)
+
 // SessionOption assign various settings to the session options
 type SessionOption func(opts *SessionOptions)
 
@@ -118,9 +123,11 @@ func WriteWithPreviousKV(previous *KVPair) WriteOption {
 // ReadOption assign various settings to the read options
 type ReadOption func(opts *ReadOptions)
 
-type localIndex struct {
-	name      string
-	attribute string
+type index struct {
+	indexType             string
+	name                  string
+	partitionKeyAttribute string
+	sortKeyAttribute      string
 }
 
 // ReadOptions contains optional request parameters
@@ -128,7 +135,7 @@ type ReadOptions struct {
 	consistent bool
 	limit      *int64
 	startKey   *string
-	index      *localIndex
+	index      *index
 }
 
 // Append append more options which supports conditional addition
@@ -142,7 +149,7 @@ func (ro *ReadOptions) Append(opts ...ReadOption) {
 // enable the read consistent flag by default
 func NewReadOptions(opts ...ReadOption) *ReadOptions {
 	readOpts := &ReadOptions{
-		consistent: true,
+		consistent: false,
 	}
 
 	for _, opt := range opts {
@@ -175,13 +182,27 @@ func ReadWithLimit(limit int64) ReadOption {
 	}
 }
 
-// ReadWithIndex preform a read using a local index with the given name
-// and the name of the hash attribute.
-func ReadWithLocalIndex(name, attribute string) ReadOption {
+// ReadWithLocalIndex preform a read using a local index with the given name
+// and the name of the sort key attribute.
+func ReadWithLocalIndex(name, sortKeyAttribute string) ReadOption {
 	return func(opts *ReadOptions) {
-		opts.index = &localIndex{
-			name:      name,
-			attribute: attribute,
+		opts.index = &index{
+			indexType:        indexTypeLocal,
+			name:             name,
+			sortKeyAttribute: sortKeyAttribute,
+		}
+	}
+}
+
+// ReadWithGlobalIndex preform a read using a local index with the given name
+// and the name of the partition and sort key attributes.
+func ReadWithGlobalIndex(name, partitionKeyAttribute, sortKeyAttribute string) ReadOption {
+	return func(opts *ReadOptions) {
+		opts.index = &index{
+			indexType:             indexTypeGlobal,
+			name:                  name,
+			partitionKeyAttribute: partitionKeyAttribute,
+			sortKeyAttribute:      sortKeyAttribute,
 		}
 	}
 }
