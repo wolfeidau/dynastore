@@ -114,7 +114,7 @@ func New(cfgs ...*aws.Config) *DynaSession {
 	dynamoSvc := dynamodb.New(sess)
 
 	return &DynaSession{
-		dynamoSvc, nil,
+		dynamoSvc, defaultHooks,
 	}
 }
 
