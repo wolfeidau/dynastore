@@ -104,3 +104,15 @@ type Partition interface {
 	// Atomic delete of a single value
 	AtomicDeleteWithContext(ctx context.Context, key string, previous *KVPair) (bool, error)
 }
+
+// StoreHooks is a container for callbacks that can instrument the datastore
+type StoreHooks struct {
+	// RequestBuilt will be invoked prior to dispatching the request to the AWS SDK
+	RequestBuilt func(ctx context.Context, params interface{}) context.Context
+}
+
+var defaultHooks = &StoreHooks{
+	RequestBuilt: func(ctx context.Context, params interface{}) context.Context {
+		return ctx
+	},
+}
