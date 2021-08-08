@@ -8,6 +8,35 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
+// SessionOption assign various settings to the session options
+type SessionOption func(opts *SessionOptions)
+
+// SessionOptions contains optional request parameters
+type SessionOptions struct {
+	storeHooks *StoreHooks
+}
+
+// NewSessionOptions create session options, assign defaults then accept overrides
+func NewSessionOptions(opts ...SessionOption) *SessionOptions {
+	// assign a place holder value to detect whether to assign the default TTL
+	sessionOpts := &SessionOptions{
+		storeHooks: defaultHooks,
+	}
+
+	for _, opt := range opts {
+		opt(sessionOpts)
+	}
+
+	return sessionOpts
+}
+
+// SessionWithAWSHooks hooks invoked while using this session
+func SessionWithAWSHooks(storeHooks *StoreHooks) SessionOption {
+	return func(opts *SessionOptions) {
+		opts.storeHooks = storeHooks
+	}
+}
+
 // WriteOption assign various settings to the write options
 type WriteOption func(opts *WriteOptions)
 
