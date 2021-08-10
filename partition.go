@@ -11,7 +11,7 @@ import (
 // dynaPartition store which is backed by AWS DynamoDB
 type DynaPartition struct {
 	session   *DynaSession
-	table     Table
+	table     *DynaTable
 	partition string
 }
 

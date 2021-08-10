@@ -145,6 +145,10 @@ func (ro *ReadOptions) Append(opts ...ReadOption) {
 	}
 }
 
+func (ro *ReadOptions) hasIndex() bool {
+	return ro.index != nil
+}
+
 // NewReadOptions create read options, assign defaults then accept overrides
 // enable the read consistent flag by default
 func NewReadOptions(opts ...ReadOption) *ReadOptions {

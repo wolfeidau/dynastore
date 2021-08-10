@@ -11,8 +11,8 @@ type DynaSession struct {
 	storeHooks *StoreHooks
 }
 
-func (ds *DynaSession) Table(tableName string) *Dynatable {
-	return &Dynatable{session: ds, tableName: tableName}
+func (ds *DynaSession) Table(tableName string) *DynaTable {
+	return &DynaTable{session: ds, tableName: tableName}
 }
 
 // New construct a DynamoDB backed store with default session / service
