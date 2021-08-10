@@ -11,21 +11,21 @@ import (
 	dexp "github.com/aws/aws-sdk-go/service/dynamodb/expression"
 )
 
-type Dynatable struct {
+type DynaTable struct {
 	session   *DynaSession
 	tableName string
 }
 
-func (dt *Dynatable) GetTableName() string {
+func (dt *DynaTable) GetTableName() string {
 	return dt.tableName
 }
 
-func (dt *Dynatable) Partition(partition string) Partition {
+func (dt *DynaTable) Partition(partition string) *DynaPartition {
 	return &DynaPartition{session: dt.session, table: dt, partition: partition}
 }
 
 // Put a value at the specified key
-func (dt *Dynatable) PutWithContext(ctx context.Context, partitionKey, hashKey string, options ...WriteOption) error {
+func (dt *DynaTable) PutWithContext(ctx context.Context, partitionKey, hashKey string, options ...WriteOption) error {
 	writeOptions := NewWriteOptions(options...)
 
 	ctx = setOperationName(ctx, "Put")
@@ -60,10 +60,16 @@ func (dt *Dynatable) PutWithContext(ctx context.Context, partitionKey, hashKey s
 }
 
 // GetWithContext a value given its key
-func (dt *Dynatable) GetWithContext(ctx context.Context, partitionKey, sortKey string, options ...ReadOption) (*KVPair, error) {
+//
+// This operation uses the DynamoDB get operation which doesn't support index read options
+func (dt *DynaTable) GetWithContext(ctx context.Context, partitionKey, sortKey string, options ...ReadOption) (*KVPair, error) {
 	readOptions := NewReadOptions(options...)
 
 	ctx = setOperationName(ctx, "Get")
+
+	if readOptions.hasIndex() {
+		return nil, ErrIndexNotSupported
+	}
 
 	res, err := dt.getKey(ctx, partitionKey, sortKey, readOptions)
 	if err != nil {
@@ -87,10 +93,16 @@ func (dt *Dynatable) GetWithContext(ctx context.Context, partitionKey, sortKey s
 }
 
 // ExistsWithContext if a sort key exists in the store
-func (dt *Dynatable) ExistsWithContext(ctx context.Context, partitionKey, sortKey string, options ...ReadOption) (bool, error) {
+//
+// This operation uses the DynamoDB get operation which doesn't support index read options
+func (dt *DynaTable) ExistsWithContext(ctx context.Context, partitionKey, sortKey string, options ...ReadOption) (bool, error) {
 	readOptions := NewReadOptions(options...)
 
 	ctx = setOperationName(ctx, "Exists")
+
+	if readOptions.hasIndex() {
+		return false, ErrIndexNotSupported
+	}
 
 	getItem := &dynamodb.GetItemInput{
 		TableName:      aws.String(dt.GetTableName()),
@@ -118,7 +130,7 @@ func (dt *Dynatable) ExistsWithContext(ctx context.Context, partitionKey, sortKe
 }
 
 // DeleteWithContext the value at the specified key
-func (dt *Dynatable) DeleteWithContext(ctx context.Context, partitionKey, sortKey string) error {
+func (dt *DynaTable) DeleteWithContext(ctx context.Context, partitionKey, sortKey string) error {
 	ctx = setOperationName(ctx, "Delete")
 
 	deleteItem := &dynamodb.DeleteItemInput{
@@ -137,26 +149,17 @@ func (dt *Dynatable) DeleteWithContext(ctx context.Context, partitionKey, sortKe
 }
 
 // ListPageWithContext the content of a given prefix
-func (dt *Dynatable) ListPageWithContext(ctx context.Context, partitionKey, prefix string, options ...ReadOption) (*KVPairPage, error) {
+func (dt *DynaTable) ListPageWithContext(ctx context.Context, partitionKey, prefix string, options ...ReadOption) (*KVPairPage, error) {
 	readOptions := NewReadOptions(options...)
 
 	ctx = setOperationName(ctx, "ListPage")
 
-	partitionKeyAttribute := "id"
-	sortKeyAttribute := "name"
+	knames := getKeyAttributeNames(readOptions)
 
-	if readOptions.index != nil {
-		sortKeyAttribute = readOptions.index.sortKeyAttribute
-
-		if readOptions.index.indexType == indexTypeGlobal {
-			partitionKeyAttribute = readOptions.index.partitionKeyAttribute
-		}
-	}
-
-	key := dexp.Key(partitionKeyAttribute).Equal(dexp.Value(partitionKey))
+	key := dexp.Key(knames.partitionKey).Equal(dexp.Value(partitionKey))
 
 	if prefix != "" {
-		key = key.And(dexp.Key(sortKeyAttribute).BeginsWith(prefix))
+		key = key.And(dexp.Key(knames.sortKey).BeginsWith(prefix))
 	}
 
 	expr, err := dexp.NewBuilder().WithKeyCondition(key).Build()
@@ -222,7 +225,7 @@ func (dt *Dynatable) ListPageWithContext(ctx context.Context, partitionKey, pref
 }
 
 // AtomicPutWithContext Atomic CAS operation on a single value.
-func (dt *Dynatable) AtomicPutWithContext(ctx context.Context, partitionKey, sortKey string, options ...WriteOption) (bool, *KVPair, error) {
+func (dt *DynaTable) AtomicPutWithContext(ctx context.Context, partitionKey, sortKey string, options ...WriteOption) (bool, *KVPair, error) {
 	writeOptions := NewWriteOptions(options...)
 
 	update, err := buildUpdate(writeOptions)
@@ -277,7 +280,7 @@ func (dt *Dynatable) AtomicPutWithContext(ctx context.Context, partitionKey, sor
 // * if previous is nil then assert that the key doesn't exist
 //
 // FIXME: should the second case just return false, nil?
-func (dt *Dynatable) AtomicDeleteWithContext(ctx context.Context, partitionKey, sortKey string, previous *KVPair) (bool, error) {
+func (dt *DynaTable) AtomicDeleteWithContext(ctx context.Context, partitionKey, sortKey string, previous *KVPair) (bool, error) {
 	ctx = setOperationName(ctx, "AtomicDelete")
 
 	getRes, err := dt.getKey(ctx, partitionKey, sortKey, NewReadOptions())
@@ -319,14 +322,11 @@ func (dt *Dynatable) AtomicDeleteWithContext(ctx context.Context, partitionKey, 
 	return true, nil
 }
 
-func (dt *Dynatable) getKey(ctx context.Context, partitionKey, sortKey string, options *ReadOptions) (*dynamodb.GetItemOutput, error) {
+func (dt *DynaTable) getKey(ctx context.Context, partitionKey, sortKey string, options *ReadOptions) (*dynamodb.GetItemOutput, error) {
 	getItem := &dynamodb.GetItemInput{
 		TableName:      aws.String(dt.GetTableName()),
 		ConsistentRead: aws.Bool(options.consistent),
-		Key: map[string]*dynamodb.AttributeValue{
-			"id":   {S: aws.String(partitionKey)},
-			"name": {S: aws.String(sortKey)},
-		},
+		Key:            buildKeys(partitionKey, sortKey),
 	}
 
 	ctx = dt.session.storeHooks.RequestBuilt(ctx, getItem)
@@ -359,4 +359,30 @@ func buildUpdate(options *WriteOptions) (dexp.UpdateBuilder, error) {
 	}
 
 	return update, nil
+}
+
+func getKeyAttributeNames(readOptions *ReadOptions) *keysAttributes {
+	k := defaultKeyAttributes()
+
+	if readOptions.index != nil {
+		k.sortKey = readOptions.index.sortKeyAttribute
+
+		if readOptions.index.indexType == indexTypeGlobal {
+			k.partitionKey = readOptions.index.partitionKeyAttribute
+		}
+	}
+
+	return k
+}
+
+type keysAttributes struct {
+	partitionKey string
+	sortKey      string
+}
+
+func defaultKeyAttributes() *keysAttributes {
+	return &keysAttributes{
+		partitionKey: "id",
+		sortKey:      "name",
+	}
 }
