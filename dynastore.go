@@ -7,6 +7,14 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
 )
 
+const (
+	// DefaultPartitionKeyAttribute this is the default partion key attribute name used throughout dynastore
+	DefaultPartitionKeyAttribute = "id"
+
+	// DefaultSortKeyAttribute this is the default sort key attribute name used throughout dynastore
+	DefaultSortKeyAttribute = "name"
+)
+
 var (
 	// ErrKeyNotFound record not found in the table
 	ErrKeyNotFound = errors.New("key not found in table")
