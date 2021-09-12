@@ -28,7 +28,7 @@ func (dt *DynaTable) GetTableName() string {
 	return dt.tableName
 }
 
-func (dt *DynaTable) Partition(partition string) *DynaPartition {
+func (dt *DynaTable) Partition(partition string) Partition {
 	return &DynaPartition{session: dt.session, table: dt, partition: partition}
 }
 

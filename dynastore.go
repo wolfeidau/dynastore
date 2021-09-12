@@ -30,6 +30,9 @@ var (
 
 	// ErrIndexNotSupported dynamodb get operations don't support specifying an index
 	ErrIndexNotSupported = errors.New("indexes not supported for this operation")
+
+	_ Table     = &DynaTable{}
+	_ Partition = &DynaPartition{}
 )
 
 // Session represents the backend K/V storage using one or more DynamoDB tables containing partitions.
