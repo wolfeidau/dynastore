@@ -182,6 +182,7 @@ func (dt *DynaTable) ListPageWithContext(ctx context.Context, partitionKey, pref
 		ExpressionAttributeValues: expr.Values(),
 		ConsistentRead:            aws.Bool(readOptions.consistent),
 		Limit:                     readOptions.limit,
+		ScanIndexForward:          aws.Bool(readOptions.scanIndexForward),
 	}
 
 	if readOptions.index != nil {

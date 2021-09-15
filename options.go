@@ -132,10 +132,11 @@ type index struct {
 
 // ReadOptions contains optional request parameters
 type ReadOptions struct {
-	consistent bool
-	limit      *int64
-	startKey   *string
-	index      *index
+	consistent       bool
+	scanIndexForward bool
+	limit            *int64
+	startKey         *string
+	index            *index
 }
 
 // Append append more options which supports conditional addition
@@ -153,7 +154,8 @@ func (ro *ReadOptions) hasIndex() bool {
 // enable the read consistent flag by default
 func NewReadOptions(opts ...ReadOption) *ReadOptions {
 	readOpts := &ReadOptions{
-		consistent: false,
+		consistent:       false,
+		scanIndexForward: true, // stick with the dynamodb default which is true
 	}
 
 	for _, opt := range opts {
@@ -167,6 +169,14 @@ func NewReadOptions(opts ...ReadOption) *ReadOptions {
 func ReadConsistentDisable() ReadOption {
 	return func(opts *ReadOptions) {
 		opts.consistent = false
+	}
+}
+
+// ReadScanIndexForwardDisable if this is disabled DynamoDB reads the results in reverse order
+// by sort key value (DESCENDING ORDER)
+func ReadScanIndexForwardDisable() ReadOption {
+	return func(opts *ReadOptions) {
+		opts.scanIndexForward = false
 	}
 }
 
