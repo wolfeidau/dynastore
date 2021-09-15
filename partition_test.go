@@ -411,12 +411,13 @@ func testListPage(t *testing.T, dSession *DynaSession) {
 		assert.Equal(6, len(page.Keys))
 
 		// List should work and return all child entries
-		page, err = kv.ListPage("", ReadWithLimit(5))
+		page, err = kv.ListPage("", ReadWithLimit(5), ReadScanIndexForwardDisable())
 		assert.NoError(err)
 		assert.NotNil(page)
 		assert.Equal(5, len(page.Keys))
+		assert.Equal("testList/child", page.Keys[4].Key)
 
-		page, err = kv.ListPage("", ReadWithStartKey(page.LastKey))
+		page, err = kv.ListPage("", ReadWithStartKey(page.LastKey), ReadScanIndexForwardDisable())
 		assert.NoError(err)
 		assert.NotNil(page)
 		assert.Equal(1, len(page.Keys))
