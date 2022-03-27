@@ -1,29 +1,18 @@
-GOLANGCI_VERSION = 1.31.0
+GOLANGCI_VERSION = 1.45.2
 
 ci: lint test ##=> Run all CI targets
 .PHONY: ci
 
-bin/golangci-lint: bin/golangci-lint-${GOLANGCI_VERSION}
-	@ln -sf golangci-lint-${GOLANGCI_VERSION} bin/golangci-lint
-bin/golangci-lint-${GOLANGCI_VERSION}:
-	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | BINARY=golangci-lint bash -s -- v${GOLANGCI_VERSION}
-	@mv bin/golangci-lint $@
-
-bin/gcov2lcov:
-	@go get github.com/jandelgado/gcov2lcov
-	@env GOBIN=$$PWD/bin GO111MODULE=on go install github.com/jandelgado/gcov2lcov
-
-lint: bin/golangci-lint ##=> Lint all the things
+lint:
 	@echo "--- lint all the things"
-	@$(shell pwd)/bin/golangci-lint run
+	docker run --rm -v $(shell pwd):/app -w /app golangci/golangci-lint:v$(GOLANGCI_VERSION) golangci-lint run -v
 .PHONY: lint
 
-clean: ##=> Clean all the things
+clean:
 	$(info [+] Clean all the things...)
 .PHONY: clean
 
-test: bin/gcov2lcov
+test:
 	@echo "--- test all the things"
 	@go test -v -covermode=count -coverprofile=coverage.txt ./ 
-	@bin/gcov2lcov -infile=coverage.txt -outfile=coverage.lcov
 .PHONY: test

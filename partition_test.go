@@ -2,7 +2,7 @@ package dynastore
 
 import (
 	"context"
-	"io/ioutil"
+	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -137,7 +137,7 @@ func testPutGetDeleteExists(t *testing.T, dSession *DynaSession) {
 	_, err := kv.Get("testPutGetDelete_not_exist_key")
 	assert.Equal(ErrKeyNotFound, err)
 
-	data, err := ioutil.ReadFile("fixtures/pr.json")
+	data, err := os.ReadFile("fixtures/pr.json")
 	assert.NoError(err)
 
 	value := string(data)

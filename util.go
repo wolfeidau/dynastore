@@ -10,6 +10,11 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 )
 
+const (
+	base10    = 10
+	int64bits = 64
+)
+
 // DecodeItem decode a DDB attribute value into a KVPair
 func DecodeItem(item map[string]*dynamodb.AttributeValue) (*KVPair, error) {
 	kv := new(KVPair)
@@ -43,7 +48,7 @@ func isItemExpired(item map[string]*dynamodb.AttributeValue) bool {
 	var ttl int64
 
 	if v, ok := item["expires"]; ok {
-		ttl, _ = strconv.ParseInt(aws.StringValue(v.N), 10, 64)
+		ttl, _ = strconv.ParseInt(aws.StringValue(v.N), base10, int64bits)
 		return time.Unix(ttl, 0).Before(time.Now())
 	}
 
