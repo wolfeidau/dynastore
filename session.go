@@ -37,3 +37,10 @@ func NewWithOptions(awscfg *aws.Config, options ...SessionOption) *DynaSession {
 		sessionOptions.storeHooks,
 	}
 }
+
+func NewWithClient(dynamoSvc *dynamodb.DynamoDB, storeHooks *StoreHooks) *DynaSession {
+	return &DynaSession{
+		dynamoSvc,
+		storeHooks,
+	}
+}

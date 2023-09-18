@@ -1,4 +1,4 @@
-package dynastore
+package integration
 
 import (
 	"fmt"
