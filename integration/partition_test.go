@@ -1,4 +1,4 @@
-package dynastore
+package integration
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
+	"github.com/wolfeidau/dynastore"
 )
 
 type indexFields struct {
@@ -30,15 +31,15 @@ func Test(t *testing.T) {
 	err := ensureVersionTable(dbSvc, "testing-locks")
 	assert.NoError(err)
 
-	dl := &DynaSession{DynamoDB: dbSvc, storeHooks: &StoreHooks{
+	dl := dynastore.NewWithClient(dbSvc, &dynastore.StoreHooks{
 		RequestBuilt: func(ctx context.Context, params interface{}) context.Context {
 			log.Info().Fields(map[string]interface{}{
-				"operation": OperationName(ctx),
+				"operation": dynastore.OperationName(ctx),
 				"params":    params,
 			}).Msg("RequestSent")
 			return ctx
 		},
-	}}
+	})
 
 	testPutGetDeleteExists(t, dl)
 	testList(t, dl)
@@ -127,7 +128,7 @@ func ensureVersionTable(dbSvc dynamodbiface.DynamoDBAPI, tableName string) error
 	return nil
 }
 
-func testPutGetDeleteExists(t *testing.T, dSession *DynaSession) {
+func testPutGetDeleteExists(t *testing.T, dSession *dynastore.DynaSession) {
 	assert := require.New(t)
 
 	// , tableName: "testing-locks", partition: "agent"
@@ -135,7 +136,7 @@ func testPutGetDeleteExists(t *testing.T, dSession *DynaSession) {
 
 	// Get a not exist key should return ErrKeyNotFound
 	_, err := kv.Get("testPutGetDelete_not_exist_key")
-	assert.Equal(ErrKeyNotFound, err)
+	assert.Equal(dynastore.ErrKeyNotFound, err)
 
 	data, err := os.ReadFile("fixtures/pr.json")
 	assert.NoError(err)
@@ -150,10 +151,10 @@ func testPutGetDeleteExists(t *testing.T, dSession *DynaSession) {
 	} {
 		t.Run(key, func(t *testing.T) {
 			// Put the key
-			err = kv.Put(key, WriteWithString(value), WriteWithTTL(2*time.Second))
+			err = kv.Put(key, dynastore.WriteWithString(value), dynastore.WriteWithTTL(2*time.Second))
 			assert.NoError(err)
 
-			var pair *KVPair
+			var pair *dynastore.KVPair
 
 			// Get should return the value and an incremented index
 			pair, err = kv.Get(key)
@@ -191,7 +192,7 @@ func testPutGetDeleteExists(t *testing.T, dSession *DynaSession) {
 	key := "something/withoutExpires"
 
 	// Put the key
-	err = kv.Put(key, WriteWithString(value), WriteWithNoExpires(), WriteWithNoExpires())
+	err = kv.Put(key, dynastore.WriteWithString(value), dynastore.WriteWithNoExpires(), dynastore.WriteWithNoExpires())
 	assert.NoError(err)
 
 	// Get should return the value and an incremented index
@@ -202,7 +203,7 @@ func testPutGetDeleteExists(t *testing.T, dSession *DynaSession) {
 	assert.Equal(int64(0), pair.Expires)
 }
 
-func testAtomicPut(t *testing.T, dSession *DynaSession) {
+func testAtomicPut(t *testing.T, dSession *dynastore.DynaSession) {
 	assert := require.New(t)
 
 	kv := dSession.Table("testing-locks").Partition("agent")
@@ -212,7 +213,7 @@ func testAtomicPut(t *testing.T, dSession *DynaSession) {
 		value := []byte("world")
 
 		// Put the key
-		err := kv.Put(key, WriteWithBytes(value))
+		err := kv.Put(key, dynastore.WriteWithBytes(value))
 		assert.NoError(err)
 
 		// Get should return the value and an incremented index
@@ -223,24 +224,24 @@ func testAtomicPut(t *testing.T, dSession *DynaSession) {
 		assert.NotEqual(0, pair.Version)
 
 		// This CAS should fail: previous exists.
-		success, _, err := kv.AtomicPut(key, WriteWithString("WORLD"))
+		success, _, err := kv.AtomicPut(key, dynastore.WriteWithString("WORLD"))
 		assert.Error(err)
 		assert.False(success)
 
 		// This CAS should succeed
-		success, _, err = kv.AtomicPut(key, WriteWithPreviousKV(pair), WriteWithBytes([]byte("WORLD")))
+		success, _, err = kv.AtomicPut(key, dynastore.WriteWithPreviousKV(pair), dynastore.WriteWithBytes([]byte("WORLD")))
 		assert.NoError(err)
 		assert.True(success)
 
 		// This CAS should fail, key has wrong index.
 		pair.Version = 6744
-		success, _, err = kv.AtomicPut(key, WriteWithPreviousKV(pair), WriteWithBytes([]byte("WORLDWORLD")))
-		assert.Equal(err, ErrKeyModified)
+		success, _, err = kv.AtomicPut(key, dynastore.WriteWithPreviousKV(pair), dynastore.WriteWithBytes([]byte("WORLDWORLD")))
+		assert.Equal(err, dynastore.ErrKeyModified)
 		assert.False(success)
 	})
 }
 
-func testAtomicPutLocalIndex(t *testing.T, dSession *DynaSession) {
+func testAtomicPutLocalIndex(t *testing.T, dSession *dynastore.DynaSession) {
 	assert := require.New(t)
 
 	kv := dSession.Table("testing-locks").Partition("agent")
@@ -252,13 +253,13 @@ func testAtomicPutLocalIndex(t *testing.T, dSession *DynaSession) {
 		timeStamp := "20200103T1100Z"
 
 		// Put the key
-		err := kv.Put(key, WriteWithBytes(value), WriteWithFields(map[string]string{
+		err := kv.Put(key, dynastore.WriteWithBytes(value), dynastore.WriteWithFields(map[string]string{
 			"created": timeStamp,
 		}))
 		assert.NoError(err)
 
 		// Get should return the value and an incremented index
-		page, err := kv.ListPage(timeStamp, ReadWithLocalIndex("idx_created", "created"))
+		page, err := kv.ListPage(timeStamp, dynastore.ReadWithLocalIndex("idx_created", "created"))
 		assert.NoError(err)
 		assert.Equal(1, len(page.Keys))
 
@@ -269,7 +270,7 @@ func testAtomicPutLocalIndex(t *testing.T, dSession *DynaSession) {
 	})
 }
 
-func testAtomicPutGlobalIndex(t *testing.T, dSession *DynaSession) {
+func testAtomicPutGlobalIndex(t *testing.T, dSession *dynastore.DynaSession) {
 	assert := require.New(t)
 
 	kv := dSession.Table("testing-locks")
@@ -282,14 +283,14 @@ func testAtomicPutGlobalIndex(t *testing.T, dSession *DynaSession) {
 		timeStamp := "20200103T1100Z"
 
 		// Put the key
-		err := kv.PutWithContext(context.TODO(), "agent", sortKey, WriteWithBytes(value), WriteWithFields(map[string]string{
+		err := kv.PutWithContext(context.TODO(), "agent", sortKey, dynastore.WriteWithBytes(value), dynastore.WriteWithFields(map[string]string{
 			"pk1": username,
 			"sk1": timeStamp,
 		}))
 		assert.NoError(err)
 
 		// Get should return the value and an incremented index
-		page, err := kv.ListPageWithContext(context.TODO(), username, timeStamp, ReadWithGlobalIndex("idx_global_1", "pk1", "sk1"))
+		page, err := kv.ListPageWithContext(context.TODO(), username, timeStamp, dynastore.ReadWithGlobalIndex("idx_global_1", "pk1", "sk1"))
 		assert.NoError(err)
 		assert.Equal(1, len(page.Keys))
 
@@ -301,7 +302,7 @@ func testAtomicPutGlobalIndex(t *testing.T, dSession *DynaSession) {
 	})
 }
 
-func testAtomicDelete(t *testing.T, dSession *DynaSession) {
+func testAtomicDelete(t *testing.T, dSession *dynastore.DynaSession) {
 	assert := require.New(t)
 
 	kv := dSession.Table("testing-locks").Partition("agent")
@@ -311,7 +312,7 @@ func testAtomicDelete(t *testing.T, dSession *DynaSession) {
 		value := []byte("world")
 
 		// Put the key
-		err := kv.Put(key, WriteWithBytes(value))
+		err := kv.Put(key, dynastore.WriteWithBytes(value))
 		assert.NoError(err)
 
 		// Get should return the value and an incremented index
@@ -337,12 +338,12 @@ func testAtomicDelete(t *testing.T, dSession *DynaSession) {
 
 		// Delete a non-existent key; should fail
 		success, err = kv.AtomicDelete(key, pair)
-		assert.Equal(ErrKeyNotFound, err)
+		assert.Equal(dynastore.ErrKeyNotFound, err)
 		assert.False(success)
 	})
 }
 
-func testList(t *testing.T, dSession *DynaSession) {
+func testList(t *testing.T, dSession *dynastore.DynaSession) {
 	assert := require.New(t)
 
 	kv := dSession.Table("testing-locks").Partition("agent")
@@ -352,17 +353,17 @@ func testList(t *testing.T, dSession *DynaSession) {
 		subfolderKey := "testList/subfolder"
 
 		// Put the first child key
-		err := kv.Put(childKey, WriteWithBytes([]byte("first")))
+		err := kv.Put(childKey, dynastore.WriteWithBytes([]byte("first")))
 		assert.NoError(err)
 
 		// Put the second child key which is also a directory
-		err = kv.Put(subfolderKey, WriteWithBytes([]byte("second")))
+		err = kv.Put(subfolderKey, dynastore.WriteWithBytes([]byte("second")))
 		assert.NoError(err)
 
 		// Put child keys under secondKey
 		for i := 1; i <= 3; i++ {
 			key := "testList/subfolder/key" + strconv.Itoa(i)
-			err = kv.Put(key, WriteWithBytes([]byte("value")))
+			err = kv.Put(key, dynastore.WriteWithBytes([]byte("value")))
 			assert.NoError(err)
 		}
 
@@ -374,7 +375,7 @@ func testList(t *testing.T, dSession *DynaSession) {
 	})
 }
 
-func testListPage(t *testing.T, dSession *DynaSession) {
+func testListPage(t *testing.T, dSession *dynastore.DynaSession) {
 	assert := require.New(t)
 
 	kv := dSession.Table("testing-locks").Partition("agent")
@@ -384,17 +385,17 @@ func testListPage(t *testing.T, dSession *DynaSession) {
 		subfolderKey := "testList/subfolder"
 
 		// Put the first child key
-		err := kv.Put(childKey, WriteWithBytes([]byte("first")))
+		err := kv.Put(childKey, dynastore.WriteWithBytes([]byte("first")))
 		assert.NoError(err)
 
 		// Put the second child key which is also a directory
-		err = kv.Put(subfolderKey, WriteWithBytes([]byte("second")))
+		err = kv.Put(subfolderKey, dynastore.WriteWithBytes([]byte("second")))
 		assert.NoError(err)
 
 		// Put child keys under secondKey
 		for i := 1; i <= 3; i++ {
 			key := "testList/subfolder/key" + strconv.Itoa(i)
-			err = kv.Put(key, WriteWithBytes([]byte("value")))
+			err = kv.Put(key, dynastore.WriteWithBytes([]byte("value")))
 			assert.NoError(err)
 		}
 
@@ -411,13 +412,13 @@ func testListPage(t *testing.T, dSession *DynaSession) {
 		assert.Equal(6, len(page.Keys))
 
 		// List should work and return all child entries
-		page, err = kv.ListPage("", ReadWithLimit(5), ReadScanIndexForwardDisable())
+		page, err = kv.ListPage("", dynastore.ReadWithLimit(5), dynastore.ReadScanIndexForwardDisable())
 		assert.NoError(err)
 		assert.NotNil(page)
 		assert.Equal(5, len(page.Keys))
 		assert.Equal("testList/child", page.Keys[4].Key)
 
-		page, err = kv.ListPage("", ReadWithStartKey(page.LastKey), ReadScanIndexForwardDisable())
+		page, err = kv.ListPage("", dynastore.ReadWithStartKey(page.LastKey), dynastore.ReadScanIndexForwardDisable())
 		assert.NoError(err)
 		assert.NotNil(page)
 		assert.Equal(1, len(page.Keys))

@@ -10,15 +10,14 @@
 //
 // To setup a session, configure a table / partition and retrieve a record.
 //
-//     session := dynastore.New()
-//     kv := session.Table("agents").Partition("users")
+//	session := dynastore.New()
+//	kv := session.Table("agents").Partition("users")
 //
-//     key := "user/123"
-//     _, err := kv.Get("user/123")
-//     if err != nil {
-//         if err == dynastore.ErrKeyNotFound {
-//             log.Printf("not found: %s", key)
-//         }
-//     }
-//
+//	key := "user/123"
+//	_, err := kv.Get("user/123")
+//	if err != nil {
+//	    if err == dynastore.ErrKeyNotFound {
+//	        log.Printf("not found: %s", key)
+//	    }
+//	}
 package dynastore
